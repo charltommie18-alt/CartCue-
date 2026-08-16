@@ -14,6 +14,9 @@ export default function Footer() {
         <Link href="/disclosure" className="hover:underline">
           Affiliate Disclosure
         </Link>
+        <Link href="/delete-data" className="hover:underline">
+          Data Deletion
+        </Link>
       </div>
     </footer>
   );
