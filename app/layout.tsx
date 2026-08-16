@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Footer from "@/components/footer";
+import InstallButton from "@/components/install-button";
 
 export const metadata: Metadata = {
   title: "CartCue",
@@ -27,6 +28,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
+        <InstallButton />
         {children}
         <Footer />
       </body>
