@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: "CartCue",
   webDir: "public",
   server: {
-    url: "https://YOUR-APP-URL.onrender.com",
+    url: "https://cartcue-8eb4.onrender.com",
     cleartext: false,
   },
 };
