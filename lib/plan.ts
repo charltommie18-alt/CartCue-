@@ -49,12 +49,6 @@ function save(s: Stored) {
   }
 }
 
-export function startTrial() {
-  const s = load();
-  if (!s.trialStartedAt) s.trialStartedAt = new Date().toISOString();
-  save(s);
-}
-
 export function activateAmazonSub() {
   const s = load();
   s.pro = true;
@@ -73,17 +67,20 @@ export function getPlanState(): PlanState {
       subSku: s.subSku,
     };
 
-  if (s.trialStartedAt) {
-    const end =
-      new Date(s.trialStartedAt).getTime() + TRIAL_DAYS * 86400000;
-    if (Date.now() < end) {
-      return {
-        plan: "trial",
-        trialEndsAt: new Date(end).toISOString(),
-        generationsLeft: Math.max(0, TRIAL_GENERATIONS - s.trialUsed),
-        subSku: null,
-      };
-    }
+  // Auto-start the 7-day Pro trial for every new account
+  if (!s.trialStartedAt) {
+    s.trialStartedAt = new Date().toISOString();
+    save(s);
+  }
+
+  const end = new Date(s.trialStartedAt).getTime() + TRIAL_DAYS * 86400000;
+  if (Date.now() < end) {
+    return {
+      plan: "trial",
+      trialEndsAt: new Date(end).toISOString(),
+      generationsLeft: Math.max(0, TRIAL_GENERATIONS - s.trialUsed),
+      subSku: null,
+    };
   }
 
   const monthKey = new Date().toISOString().slice(0, 7);
