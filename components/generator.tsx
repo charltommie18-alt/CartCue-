@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ProductForm from "./product-form";
 import OutputTabs from "./output-tabs";
 import AccountLinks from "./account-links";
 import { saveKit } from "@/lib/storage";
+import { consumeGeneration, getPlanState } from "@/lib/plan";
+import type { PlanState } from "@/lib/plan";
 import type { GeneratorInput, InstagramKit } from "@/lib/types";
 
 export default function Generator() {
@@ -13,8 +15,22 @@ export default function Generator() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [plan, setPlan] = useState<PlanState | null>(null);
+
+  useEffect(() => {
+    setPlan(getPlanState());
+  }, []);
 
   async function handleGenerate(input: GeneratorInput) {
+    const st = getPlanState();
+    if (st.generationsLeft === 0) {
+      setError(
+        "You're out of free generations. Upgrade to Pro ($4.99/mo via Amazon) for unlimited kits."
+      );
+      setPlan(st);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setSaved(false);
@@ -29,6 +45,8 @@ export default function Generator() {
         throw new Error(data?.error || "Generation failed");
       }
       const data = await res.json();
+      consumeGeneration();
+      setPlan(getPlanState());
       setKit(data.kit);
       setLastInput(input);
     } catch (e) {
@@ -63,25 +81,54 @@ export default function Generator() {
               Turn Amazon products into Instagram content.
             </p>
           </div>
-          <a
-            href="/saved"
-            className="text-sm font-medium text-orange-600 hover:underline"
-          >
-            Saved kits
-          </a>
+          <div className="flex gap-4">
+            <a
+              href="/subscription"
+              className="text-sm font-medium text-orange-600 hover:underline"
+            >
+              Subscription
+            </a>
+            <a
+              href="/saved"
+              className="text-sm font-medium text-orange-600 hover:underline"
+            >
+              Saved kits
+            </a>
+          </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
+        {plan && (
+          <div className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-3 text-sm text-neutral-600 shadow-sm">
+            <span>
+              Plan:{" "}
+              <span className="font-semibold uppercase">{plan.plan}</span>
+              {plan.generationsLeft !== null && (
+                <> · {plan.generationsLeft} generations left</>
+              )}
+            </span>
+            <a
+              href="/subscription"
+              className="font-medium text-orange-600 hover:underline"
+            >
+              Upgrade
+            </a>
+          </div>
+        )}
+
         <AccountLinks />
 
-        <div className="grid gap-6 lg:grid-cols-[420px_1fr]">
+        <div className="grid gap-6 md:grid-cols-[360px_1fr] lg:grid-cols-[420px_1fr]">
           <ProductForm loading={loading} onGenerate={handleGenerate} />
 
           <section>
             {error && (
               <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                {error}
+                {error}{" "}
+                <a href="/subscription" className="font-semibold underline">
+                  See plans
+                </a>
               </div>
             )}
 
@@ -108,4 +155,4 @@ export default function Generator() {
       </main>
     </div>
   );
-               }
+  }
