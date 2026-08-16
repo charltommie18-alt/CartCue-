@@ -33,6 +33,7 @@ export default function OutputTabs({
   saved?: boolean;
 }) {
   const [tab, setTab] = useState<TabKey>("captions");
+  const [igCopied, setIgCopied] = useState(false);
 
   const captionsAll = kit.captions.join("\n\n");
   const hashtagsAll = kit.hashtags.join(" ");
@@ -44,9 +45,36 @@ export default function OutputTabs({
     .join("\n\n");
   const reelAll = [...kit.reelHooks, "", kit.reelScript].join("\n");
 
+  function copyAndOpenInstagram() {
+    const text = [
+      kit.captions[0] ?? "",
+      "",
+      hashtagsAll,
+      kit.disclosure ? "\n" + kit.disclosure : "",
+    ].join("\n");
+
+    try {
+      navigator.clipboard?.writeText(text);
+    } catch {
+      // clipboard unavailable
+    }
+
+    let ig = "https://www.instagram.com/";
+    try {
+      const raw = window.localStorage.getItem("cartcue_links");
+      if (raw) ig = JSON.parse(raw).instagram || ig;
+    } catch {
+      // ignore
+    }
+
+    window.open(ig, "_blank");
+    setIgCopied(true);
+    setTimeout(() => setIgCopied(false), 2000);
+  }
+
   return (
     <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-1">
           {TABS.map((t) => (
             <button
@@ -62,14 +90,22 @@ export default function OutputTabs({
             </button>
           ))}
         </div>
-        {onSave && (
+        <div className="flex flex-wrap gap-2">
           <button
-            onClick={onSave}
-            className="rounded-md border border-orange-600 px-3 py-1.5 text-sm font-semibold text-orange-600 hover:bg-orange-50"
+            onClick={copyAndOpenInstagram}
+            className="rounded-md bg-gradient-to-r from-pink-600 to-purple-600 px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
           >
-            {saved ? "Saved ✓" : "Save kit"}
+            {igCopied ? "Copied! Opening…" : "📸 Copy & open Instagram"}
           </button>
-        )}
+          {onSave && (
+            <button
+              onClick={onSave}
+              className="rounded-md border border-orange-600 px-3 py-1.5 text-sm font-semibold text-orange-600 hover:bg-orange-50"
+            >
+              {saved ? "Saved ✓" : "Save kit"}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -176,4 +212,4 @@ export default function OutputTabs({
       </div>
     </div>
   );
-                }
+        }
