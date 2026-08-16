@@ -19,6 +19,13 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+function extractAsin(url: string): string | null {
+  const m =
+    url.match(/\/(?:dp|gp\/product|gp\/aw\/d|product)\/([A-Z0-9]{10})/i) ||
+    url.match(/\b([A-Z0-9]{10})\b/);
+  return m ? m[1].toUpperCase() : null;
+}
+
 const initial = {
   productName: "",
   amazonUrl: "",
@@ -43,11 +50,28 @@ export default function ProductForm({
   const [style, setStyle] = useState<string>(STYLES[0]);
   const [tone, setTone] = useState<string>(TONES[0]);
   const [includeDisclosure, setIncludeDisclosure] = useState(true);
+  const [importUrl, setImportUrl] = useState("");
+  const [importMsg, setImportMsg] = useState<string | null>(null);
 
   const set =
     (key: keyof typeof initial) =>
     (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  function handleImport() {
+    const asin = extractAsin(importUrl);
+    if (!asin) {
+      setImportMsg("Could not find an ASIN in that link.");
+      return;
+    }
+    setForm((f) => ({
+      ...f,
+      asin,
+      amazonUrl: importUrl,
+      affiliateUrl: f.affiliateUrl || importUrl,
+    }));
+    setImportMsg(`Imported ASIN ${asin}. Add a name + benefit and generate.`);
+  }
 
   function loadSample() {
     setForm({
@@ -86,6 +110,30 @@ export default function ProductForm({
         >
           Load sample
         </button>
+      </div>
+
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+        <span className="mb-1 block text-sm font-medium text-neutral-700">
+           Quick import from Amazon
+        </span>
+        <div className="flex gap-2">
+          <input
+            className={inputCls}
+            value={importUrl}
+            onChange={(e) => setImportUrl(e.target.value)}
+            placeholder="Paste Amazon product link"
+          />
+          <button
+            type="button"
+            onClick={handleImport}
+            className="shrink-0 rounded-md bg-amber-400 px-3 py-2 text-sm font-semibold text-neutral-900 hover:bg-amber-500"
+          >
+            Import
+          </button>
+        </div>
+        {importMsg && (
+          <p className="mt-1 text-xs text-neutral-600">{importMsg}</p>
+        )}
       </div>
 
       <Field label="Product name *">
@@ -132,6 +180,15 @@ export default function ProductForm({
           value={form.affiliateUrl}
           onChange={set("affiliateUrl")}
           placeholder="https://amzn.to/..."
+        />
+      </Field>
+
+      <Field label="ASIN">
+        <input
+          className={inputCls}
+          value={form.asin}
+          onChange={set("asin")}
+          placeholder="B0XXXXXXXX"
         />
       </Field>
 
@@ -206,4 +263,4 @@ export default function ProductForm({
       </button>
     </form>
   );
-          }
+    }
