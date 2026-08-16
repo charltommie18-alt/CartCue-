@@ -5,7 +5,6 @@ import {
   AMAZON_SUB_SKU,
   activateAmazonSub,
   getPlanState,
-  startTrial,
 } from "@/lib/plan";
 import type { PlanState } from "@/lib/plan";
 
@@ -19,12 +18,6 @@ export default function SubscriptionPage() {
   useEffect(() => {
     setState(getPlanState());
   }, []);
-
-  function handleTrial() {
-    startTrial();
-    setState(getPlanState());
-    setNotice("7-day Pro trial started. Enjoy unlimited kits!");
-  }
 
   function handleAmazon() {
     if (AMAZON_PAYMENT_URL) {
@@ -82,7 +75,7 @@ export default function SubscriptionPage() {
             <h2 className="font-semibold text-neutral-900">Starter</h2>
             <p className="mt-1 text-3xl font-bold text-neutral-900">$0</p>
             <ul className="mt-4 space-y-2 text-sm text-neutral-600">
-              <li>3 content kits / month</li>
+              <li>3 content kits / month (after trial)</li>
               <li>Basic styles</li>
               <li>Save kits on this device</li>
             </ul>
@@ -92,6 +85,9 @@ export default function SubscriptionPage() {
             >
               Use free
             </a>
+            <p className="mt-2 text-center text-[11px] text-neutral-500">
+              Your 7-day Pro trial starts automatically — no button needed.
+            </p>
           </div>
 
           <div className="rounded-xl border-2 border-orange-600 bg-white p-6 shadow-md">
@@ -117,12 +113,6 @@ export default function SubscriptionPage() {
               className="mt-6 w-full rounded-md bg-amber-400 px-4 py-2.5 text-sm font-semibold text-neutral-900 hover:bg-amber-500"
             >
               Subscribe with Amazon — $4.99/mo
-            </button>
-            <button
-              onClick={handleTrial}
-              className="mt-2 w-full rounded-md border border-orange-600 px-4 py-2.5 text-sm font-semibold text-orange-600 hover:bg-orange-50"
-            >
-              Start 7-day free trial
             </button>
             <button
               onClick={() => {
@@ -159,8 +149,8 @@ export default function SubscriptionPage() {
         </div>
 
         <p className="text-center text-xs text-neutral-500">
-          7-day free trial · cancel anytime · billed monthly via Amazon (
-          {AMAZON_SUB_SKU})
+          7-day free trial starts automatically · cancel anytime · billed
+          monthly via Amazon ({AMAZON_SUB_SKU})
         </p>
       </main>
     </div>
