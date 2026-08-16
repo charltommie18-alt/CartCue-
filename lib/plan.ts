@@ -1,7 +1,7 @@
 export type PlanState = {
   plan: "trial" | "free" | "pro";
   trialEndsAt: string | null;
-  generationsLeft: number | null; // null = unlimited
+  generationsLeft: number | null;
   subSku: string | null;
 };
 
@@ -54,6 +54,19 @@ export function activateAmazonSub() {
   s.pro = true;
   s.subSku = AMAZON_SUB_SKU;
   save(s);
+
+  try {
+    fetch("/api/notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sku: AMAZON_SUB_SKU,
+        at: new Date().toISOString(),
+      }),
+    }).catch(() => {});
+  } catch {
+    // ignore
+  }
 }
 
 export function getPlanState(): PlanState {
@@ -67,7 +80,6 @@ export function getPlanState(): PlanState {
       subSku: s.subSku,
     };
 
-  // Auto-start the 7-day Pro trial for every new account
   if (!s.trialStartedAt) {
     s.trialStartedAt = new Date().toISOString();
     save(s);
