@@ -3,6 +3,7 @@
 import { useState } from "react";
 import ProductForm from "./product-form";
 import OutputTabs from "./output-tabs";
+import AccountLinks from "./account-links";
 import { saveKit } from "@/lib/storage";
 import type { GeneratorInput, InstagramKit } from "@/lib/types";
 
@@ -71,35 +72,40 @@ export default function Generator() {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 lg:grid-cols-[420px_1fr]">
-        <ProductForm loading={loading} onGenerate={handleGenerate} />
+      <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
+        <AccountLinks />
 
-        <section>
-          {error && (
-            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-              {error}
-            </div>
-          )}
+        <div className="grid gap-6 lg:grid-cols-[420px_1fr]">
+          <ProductForm loading={loading} onGenerate={handleGenerate} />
 
-          {loading && (
-            <div className="rounded-xl border border-neutral-200 bg-white p-8 text-center text-sm text-neutral-600 shadow-sm">
-              Generating your content kit…
-            </div>
-          )}
+          <section>
+            {error && (
+              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
 
-          {kit && !loading && (
-            <OutputTabs kit={kit} onSave={handleSave} saved={saved} />
-          )}
+            {loading && (
+              <div className="rounded-xl border border-neutral-200 bg-white p-8 text-center text-sm text-neutral-600 shadow-sm">
+                Generating your content kit…
+              </div>
+            )}
 
-          {!kit && !loading && !error && (
-            <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-500">
-              Fill in a product (or click “Load sample”) and hit{" "}
-              <span className="font-semibold">Generate content kit</span> to see
-              captions, hashtags, reel scripts, stories, and carousel copy.
-            </div>
-          )}
-        </section>
+            {kit && !loading && (
+              <OutputTabs kit={kit} onSave={handleSave} saved={saved} />
+            )}
+
+            {!kit && !loading && !error && (
+              <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-500">
+                Fill in a product (or click “Load sample”) and hit{" "}
+                <span className="font-semibold">Generate content kit</span> to
+                see captions, hashtags, reel scripts, stories, and carousel
+                copy.
+              </div>
+            )}
+          </section>
+        </div>
       </main>
     </div>
   );
-    }
+               }
