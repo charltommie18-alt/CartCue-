@@ -36,7 +36,6 @@ export default function OutputTabs({ kit }: any) {
             alt={kit.productName} 
             className="h-24 w-24 rounded-xl border object-contain bg-white"
             onError={(e) => {
-              // Fallback image if Amazon blocks the direct link
               (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?auto=format&fit=crop&w=200&q=80";
             }}
           />
@@ -48,7 +47,7 @@ export default function OutputTabs({ kit }: any) {
               rel="noopener noreferrer"
               className="mt-2 inline-block rounded-full bg-yellow-400 px-4 py-2 text-sm font-bold hover:bg-yellow-500 transition"
             >
-              🛒 View on Amazon
+               View on Amazon
             </a>
             <div className="mt-3 flex gap-2">
               <input 
@@ -66,3 +65,24 @@ export default function OutputTabs({ kit }: any) {
       <div className="rounded-2xl border bg-white p-5 shadow-sm">
         <p className="font-bold">Affiliate Link</p>
         <div className="mt-2 flex gap-2">
+          <input value={kit.affiliateLink} readOnly className="flex-1 rounded-full bg-gray-100 px-4 py-2 text-sm text-gray-700" />
+          <CopyBtn text={kit.affiliateLink} />
+        </div>
+      </div>
+
+      {/* Captions & Hashtags Card */}
+      <div className="rounded-2xl border bg-white p-5 shadow-sm">
+        <p className="font-bold">Captions</p>
+        {kit.captions?.map((c: string, i: number) => (
+          <div key={i} className="mt-3 rounded-xl bg-gray-50 p-3 text-sm flex justify-between items-start gap-2">
+            <span className="text-gray-700">{c}</span>
+            <CopyBtn text={c} />
+          </div>
+        ))}
+        
+        <p className="mt-6 font-bold">Hashtags</p>
+        <p className="mt-2 text-sm text-gray-600 bg-gray-50 p-3 rounded-xl">{kit.hashtags?.join(' ')}</p>
+      </div>
+    </div>
+  );
+            }
