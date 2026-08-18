@@ -7,7 +7,6 @@ const RATE_LIMIT = 10;
 const WINDOW_MS = 60_000;
 const hits = new Map<string, number[]>();
 
-// Your Amazon Associates Tag - set in.env.local and Vercel
 const AFFILIATE_TAG = process.env.AMAZON_AFFILIATE_TAG || process.env.NEXT_PUBLIC_AMAZON_TAG || "cartcue-20";
 
 function buildAffiliateLink(urlOrAsin: string): string {
@@ -15,7 +14,6 @@ function buildAffiliateLink(urlOrAsin: string): string {
   const asinMatch = urlOrAsin.match(/(?:dp|product)\/([A-Z0-9]{10})/i) || urlOrAsin.match(/\b([A-Z0-9]{10})\b/);
   const asin = asinMatch? asinMatch[1].toUpperCase() : null;
   if (!asin) {
-    // if it's already a full URL with tag, keep it
     if (urlOrAsin.includes("amazon.com") && urlOrAsin.includes("tag=")) return urlOrAsin;
     return urlOrAsin;
   }
@@ -36,26 +34,17 @@ function rateLimited(ip: string): boolean {
 
 export async function POST(req: Request) {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-
   if (rateLimited(ip)) {
-    return NextResponse.json(
-      { error: "Too many requests. Please slow down." },
-      { status: 429 }
-    );
+    return NextResponse.json({ error: "Too many requests. Please slow down." }, { status: 429 });
   }
-
   try {
     const raw = await req.json();
     const input = generatorInputSchema.parse(raw);
 
-    // AUTO-CREATE AMAZON PAYMENT LINK
     if (!input.affiliateUrl && input.amazonUrl) {
       input.affiliateUrl = buildAffiliateLink(input.amazonUrl);
     } else if (input.affiliateUrl) {
       input.affiliateUrl = buildAffiliateLink(input.affiliateUrl);
-    }
-    if (input.amazonUrl) {
-      input.amazonUrl = input.amazonUrl; // keep original
     }
 
     const kit = await generateKit(input);
@@ -69,15 +58,9 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     if (err instanceof ZodError) {
-      return NextResponse.json(
-        { error: err.issues[0]?.message?? "Invalid input" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: err.issues[0]?.message?? "Invalid input" }, { status: 400 });
     }
     console.error(err);
-    return NextResponse.json(
-      { error: "Failed to generate content" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to generate content" }, { status: 500 });
   }
 }
