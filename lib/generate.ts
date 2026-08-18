@@ -15,7 +15,7 @@ Create an Instagram content kit for this Amazon product.
 
 Product name: ${input.productName}
 Amazon URL: ${input.amazonUrl || "Not provided"}
-Affiliate URL: ${input.affiliateUrl || "Not provided"}
+Affiliate URL: ${input.affiliateUrl || "Not provided"} - KEEP THIS LINK EXACT IN OUTPUT AS affiliateLink
 Price: ${input.price || "Not provided"}
 Category: ${input.category || "Not provided"}
 Description: ${input.description || "Not provided"}
@@ -23,7 +23,7 @@ Target audience: ${input.targetAudience || "General Amazon shoppers"}
 Main benefit: ${input.mainBenefit || "Not provided"}
 Content style: ${input.style}
 Tone: ${input.tone}
-Include affiliate disclosure: ${input.includeDisclosure ? "yes" : "no"}
+Include affiliate disclosure: ${input.includeDisclosure? "yes" : "no"}
 
 Return JSON with this exact structure:
 {
@@ -34,7 +34,10 @@ Return JSON with this exact structure:
   "storySlides": [{ "slide": number, "text": string }] (5 items),
   "carouselSlides": [{ "slide": number, "title": string, "body": string }] (5 items),
   "cta": string,
-  "disclosure": string
+  "disclosure": string,
+  "productName": "${input.productName}",
+  "affiliateLink": "${input.affiliateUrl || input.amazonUrl || ""}",
+  "amazonUrl": "${input.amazonUrl || ""}"
 }
 
 Rules:
@@ -42,6 +45,7 @@ Rules:
 - Match the requested style and tone.
 - No fake reviews, fake discounts, or misleading claims.
 - If include disclosure is "no", set disclosure to "".
+- MUST include affiliateLink and productName in JSON.
 `;
 }
 
@@ -72,7 +76,16 @@ async function generateWithAI(
   const content = data?.choices?.[0]?.message?.content;
   if (!content) throw new Error("Empty AI response");
 
-  return instagramKitSchema.parse(JSON.parse(content));
+  const parsed = JSON.parse(content);
+
+  // FORCE keep payment link and product name even if AI forgets
+  const kit = instagramKitSchema.parse(parsed) as any;
+  kit.affiliateLink = input.affiliateUrl || input.amazonUrl || parsed.affiliateLink || "";
+  kit.amazonUrl = input.amazonUrl || parsed.amazonUrl || "";
+  kit.productName = input.productName || parsed.productName || "Amazon Product";
+  kit.price = input.price || parsed.price || "";
+
+  return kit as InstagramKit;
 }
 
 export async function generateKit(input: GeneratorInput): Promise<InstagramKit> {
@@ -86,5 +99,12 @@ export async function generateKit(input: GeneratorInput): Promise<InstagramKit> 
     }
   }
 
-  return generateFallback(input);
-}
+  // Fallback MUST keep payment link
+  const fallback = generateFallback(input) as any;
+  fallback.affiliateLink = input.affiliateUrl || input.amazonUrl || "";
+  fallback.amazonUrl = input.amazonUrl || "";
+  fallback.productName = input.productName || fallback.productName || "Amazon Product";
+  fallback.price = input.price || "";
+
+  return fallback as InstagramKit;
+      }
