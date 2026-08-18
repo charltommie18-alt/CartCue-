@@ -1,0 +1,86 @@
+name: Build Android APK (Amazon Appstore IAP)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Install Amazon Appstore SDK jar
+        run: |
+          mkdir -p android/app/libs
+          cp amazon-iap/amazon-appstore-sdk-3.0.9.jar android/app/libs/
+
+      - name: Install Amazon sandbox authentication key
+        run: |
+          mkdir -p android/app/src/main/assets
+          cp amazon-iap/AppstoreAuthenticationKey.pem android/app/src/main/assets/
+
+      - name: Install Amazon IAP native plugin
+        run: |
+          mkdir -p android/app/src/main/java/com/cartcue/app
+          cp amazon-iap/AmazonIAPPlugin.java android/app/src/main/java/com/cartcue/app/
+          cp amazon-iap/MainActivity.java android/app/src/main/java/com/cartcue/app/MainActivity.java
+
+      - name: Add SDK dependency to Gradle
+        run: |
+          BUILD_GRADLE="android/app/build.gradle"
+          if ! grep -q "amazon-appstore-sdk-3.0.9.jar" "$BUILD_GRADLE"; then
+            awk '/^dependencies *\{/ && !done {print; print "    implementation files(\x27libs/amazon-appstore-sdk-3.0.9.jar\x27)"; done=1; next} {print}' "$BUILD_GRADLE" > tmp.gradle
+            mv tmp.gradle "$BUILD_GRADLE"
+          fi
+          cat "$BUILD_GRADLE"
+
+      - name: Add libs to Gradle repositories
+        run: |
+          BUILD_GRADLE="android/app/build.gradle"
+          if ! grep -q "flatDir" "$BUILD_GRADLE"; then
+            printf '\nrepositories {\n    flatDir {\n        dirs "libs"\n    }\n}\n' >> "$BUILD_GRADLE"
+          fi
+
+      - name: Patch AndroidManifest for Amazon IAP
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          # Permission required by the Amazon In-App Purchasing SDK
+          if ! grep -q "com.amazon.inapp.purchasing.Permission.NOTIFY" "$MANIFEST"; then
+            sed -i 's#<application#<uses-permission android:name="com.amazon.inapp.purchasing.Permission.NOTIFY" />\n\n    <application#' "$MANIFEST"
+          fi
+          # Package visibility (Android 11+) so the app can see the Appstore app
+          if ! grep -q "com.amazon.venezia" "$MANIFEST"; then
+            sed -i 's#<application#<queries>\n        <package android:name="com.amazon.venezia" />\n    </queries>\n\n    <application#' "$MANIFEST"
+          fi
+          cat "$MANIFEST"
+
+      - name: Build APK
+        run: cd android && chmod +x gradlew && ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: cartcue-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          
