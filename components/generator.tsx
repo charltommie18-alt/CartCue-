@@ -7,7 +7,7 @@ import AccountLinks from "./account-links";
 import TrialBanner from "./trial-banner";
 import SubscribeModal from "./subscribe-modal";
 import { saveKit } from "@/lib/storage";
-import { getPlanState, getTrialTimeLeft } from "@/lib/plan";
+import { getPlanState, getTrialTimeLeft, consumeGeneration } from "@/lib/plan";
 import type { PlanState } from "@/lib/plan";
 import type { GeneratorInput, InstagramKit } from "@/lib/types";
 
@@ -25,7 +25,10 @@ export default function Generator() {
     const st = getPlanState();
     setPlan(st);
     setTime(getTrialTimeLeft());
-    const id = setInterval(() => setTime(getTrialTimeLeft()), 60000);
+    const id = setInterval(() => {
+      setTime(getTrialTimeLeft());
+      setPlan(getPlanState());
+    }, 60000);
     return () => clearInterval(id);
   }, []);
 
@@ -36,6 +39,7 @@ export default function Generator() {
     const st = getPlanState();
     setPlan(st);
 
+    // Show popup if trial expired
     if (st.plan === 'free' && st.generationsLeft === 0) {
       setShowModal(true);
       setError("Trial expired. Please subscribe to continue.");
@@ -51,10 +55,17 @@ export default function Generator() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       });
-      if (!res.ok) throw new Error("Generation failed");
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Generation failed");
+      }
       const data = await res.json();
       setKit(data.kit);
       setLastInput(input);
+      
+      // Consume one generation
+      consumeGeneration();
+      setPlan(getPlanState());
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -63,7 +74,7 @@ export default function Generator() {
   }
 
   function handleSave() {
-    if (!kit ||!lastInput) return;
+    if (!kit || !lastInput) return;
     saveKit({
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
@@ -83,7 +94,7 @@ export default function Generator() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
           <h1 className="text-xl font-bold">Cart<span className="text-orange-600">Cue</span></h1>
           <div className="flex gap-4 text-sm">
-            <a href="/subscription" className="font-medium text-orange-600">{isPro? 'Pro ✓' : `${time.hours}h left`}</a>
+            <a href="/subscription" className="font-medium text-orange-600">{isPro ? 'Pro ✓' : `${time.hours}h left`}</a>
             <a href="/saved" className="text-neutral-500">Saved</a>
           </div>
         </div>
@@ -99,15 +110,20 @@ export default function Generator() {
         <AccountLinks />
 
         <div className="grid gap-6 md:grid-cols-[420px_1fr]">
-          <ProductForm loading={loading} onGenerate={handleGenerate} disabled={isExpired &&!isPro} />
+          {/* IMPORTANT: disabled={false} allows button to be clickable even when expired, so modal can trigger */}
+          <ProductForm loading={loading} onGenerate={handleGenerate} disabled={false} />
 
           <section>
-            {error && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error} <a href="/subscription" className="font-bold underline">Subscribe</a></div>}
+            {error && (
+              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {error} {isExpired && <a href="/subscription" className="font-bold underline">Subscribe</a>}
+              </div>
+            )}
             {loading && <div className="rounded-xl bg-white p-8 text-center text-sm">Generating with Amazon photo...</div>}
-            {kit &&!loading && <OutputTabs kit={kit} onSave={handleSave} saved={saved} />}
-            {!kit &&!loading &&!error && (
+            {kit && !loading && <OutputTabs kit={kit} onSave={handleSave} saved={saved} />}
+            {!kit && !loading && !error && (
               <div className="rounded-xl border-dashed border bg-white p-8 text-center text-sm text-neutral-500">
-                {isExpired? 'Trial expired. Subscribe to generate again.' : 'Paste Amazon link and hit Generate'}
+                {isExpired ? 'Trial expired. Click generate to subscribe.' : 'Paste Amazon link and hit Generate'}
               </div>
             )}
           </section>
@@ -117,4 +133,4 @@ export default function Generator() {
       {showModal && <SubscribeModal onClose={() => setShowModal(false)} />}
     </div>
   );
-      }
+          }
