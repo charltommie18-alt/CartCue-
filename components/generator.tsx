@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import ProductForm from "./product-form";
 import OutputTabs from "./output-tabs";
 import AccountLinks from "./account-links";
+import TrialBanner from "./trial-banner";
 import { saveKit } from "@/lib/storage";
 import { consumeGeneration, getPlanState } from "@/lib/plan";
 import type { PlanState } from "@/lib/plan";
@@ -25,7 +26,7 @@ export default function Generator() {
     const st = getPlanState();
     if (st.generationsLeft === 0) {
       setError(
-        "You're out of free generations. Upgrade to Pro ($4.99/mo via Amazon) for unlimited kits."
+        "Your 3-day trial expired. Upgrade to Pro ($4.99/mo via Amazon) for unlimited kits."
       );
       setPlan(st);
       return;
@@ -71,6 +72,8 @@ export default function Generator() {
 
   return (
     <div className="min-h-screen bg-neutral-100">
+      <TrialBanner />
+      
       <header className="border-b border-neutral-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
           <div>
@@ -104,15 +107,16 @@ export default function Generator() {
             <span>
               Plan:{" "}
               <span className="font-semibold uppercase">{plan.plan}</span>
-              {plan.generationsLeft !== null && (
-                <> · {plan.generationsLeft} generations left</>
+              {plan.generationsLeft !== null && plan.plan !== 'pro' && (
+                <> · {plan.plan === 'trial' ? 'Trial active' : `${plan.generationsLeft} left`}</>
               )}
+              {plan.plan === 'pro' && <> · Unlimited</>}
             </span>
             <a
               href="/subscription"
               className="font-medium text-orange-600 hover:underline"
             >
-              Upgrade
+              {plan.plan === 'pro' ? 'Manage' : 'Upgrade'}
             </a>
           </div>
         )}
@@ -127,14 +131,14 @@ export default function Generator() {
               <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                 {error}{" "}
                 <a href="/subscription" className="font-semibold underline">
-                  See plans
+                  Subscribe now
                 </a>
               </div>
             )}
 
             {loading && (
               <div className="rounded-xl border border-neutral-200 bg-white p-8 text-center text-sm text-neutral-600 shadow-sm">
-                Generating your content kit…
+                Generating your content kit… fetching Amazon photo…
               </div>
             )}
 
@@ -144,10 +148,9 @@ export default function Generator() {
 
             {!kit && !loading && !error && (
               <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-500">
-                Fill in a product (or click “Load sample”) and hit{" "}
+                Fill in a product (or paste Amazon link like amzn.to/...) and hit{" "}
                 <span className="font-semibold">Generate content kit</span> to
-                see captions, hashtags, reel scripts, stories, and carousel
-                copy.
+                see photo, affiliate link, captions, hashtags, reel scripts.
               </div>
             )}
           </section>
@@ -155,4 +158,4 @@ export default function Generator() {
       </main>
     </div>
   );
-  }
+      }
