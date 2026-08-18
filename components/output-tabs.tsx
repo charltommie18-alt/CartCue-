@@ -1,215 +1,35 @@
-"use client";
-
+'use client';
 import { useState } from "react";
-import type { InstagramKit } from "@/lib/types";
-import CopyButton from "./copy-button";
 
-type TabKey = "captions" | "hashtags" | "reel" | "stories" | "carousel" | "cta";
+function Copy({ text }: { text: string }) {
+  const [ok,setOk]=useState(false);
+  return <button onClick={()=>{navigator.clipboard.writeText(text); setOk(true); setTimeout(()=>setOk(false),1200)}} className="rounded-full border bg-white px-3 py-1 text-xs font-bold">{ok?'Copied':'Copy'}</button>
+}
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: "captions", label: "Captions" },
-  { key: "hashtags", label: "Hashtags" },
-  { key: "reel", label: "Reel" },
-  { key: "stories", label: "Stories" },
-  { key: "carousel", label: "Carousel" },
-  { key: "cta", label: "CTA" },
-];
-
-function Block({ text }: { text: string }) {
+export default function OutputTabs({ kit, onSave, saved }: { kit: any, onSave: ()=>void, saved: boolean }) {
+  const link = kit.affiliateLink || kit.amazonUrl || '';
   return (
-    <div className="whitespace-pre-wrap rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-800">
-      {text}
+    <div className="space-y-4">
+      <div className="rounded-2xl border bg-white p-5">
+        <p className="font-bold">Affiliate Link</p>
+        <div className="mt-2 flex gap-2">
+          <input value={link} readOnly className="flex-1 rounded-full bg-neutral-100 px-4 py-2.5 text-sm" />
+          <Copy text={link} />
+        </div>
+        <a href={link} target="_blank" className="mt-3 inline-block rounded-full bg-[#FFC83D] px-5 py-2.5 text-sm font-bold">🛒 Open Amazon</a>
+        <button onClick={onSave} className="ml-2 rounded-full border px-4 py-2.5 text-sm">{saved ? 'Saved ✓' : 'Save kit'}</button>
+      </div>
+
+      <div className="rounded-2xl border bg-white p-5">
+        <div className="flex justify-between items-center"><p className="font-bold">Captions</p><Copy text={(kit.captions||[]).join('\n\n')} /></div>
+        {(kit.captions||kit.descriptions||[]).map((c:string,i:number)=><div key={i} className="mt-3 flex gap-3 rounded-xl bg-neutral-50 p-3"><p className="flex-1 text-sm">{c}</p><Copy text={c}/></div>)}
+        
+        <div className="mt-6 flex justify-between items-center"><p className="font-bold">Hooks</p><Copy text={(kit.reelHooks||kit.hooks||[]).join('\n')} /></div>
+        {(kit.reelHooks||kit.hooks||[]).map((h:string,i:number)=><div key={i} className="mt-3 flex gap-3 rounded-xl bg-neutral-50 p-3"><p className="flex-1 text-sm">{h}</p><Copy text={h}/></div>)}
+
+        <div className="mt-6 flex justify-between items-center"><p className="font-bold">Hashtags</p><Copy text={(kit.hashtags||[]).join(' ')} /></div>
+        <p className="mt-3 rounded-xl bg-neutral-50 p-3 text-sm">{(kit.hashtags||[]).join(' ')}</p>
+      </div>
     </div>
   );
 }
-
-export default function OutputTabs({
-  kit,
-  onSave,
-  saved,
-}: {
-  kit: InstagramKit;
-  onSave?: () => void;
-  saved?: boolean;
-}) {
-  const [tab, setTab] = useState<TabKey>("captions");
-  const [igCopied, setIgCopied] = useState(false);
-
-  const captionsAll = kit.captions.join("\n\n");
-  const hashtagsAll = kit.hashtags.join(" ");
-  const storiesAll = kit.storySlides
-    .map((s) => `Slide ${s.slide}: ${s.text}`)
-    .join("\n");
-  const carouselAll = kit.carouselSlides
-    .map((s) => `Slide ${s.slide}\n${s.title}\n${s.body}`)
-    .join("\n\n");
-  const reelAll = [...kit.reelHooks, "", kit.reelScript].join("\n");
-
-  function copyAndOpenInstagram() {
-    const text = [
-      kit.captions[0] ?? "",
-      "",
-      hashtagsAll,
-      kit.disclosure ? "\n" + kit.disclosure : "",
-    ].join("\n");
-
-    try {
-      navigator.clipboard?.writeText(text);
-    } catch {
-      // clipboard unavailable
-    }
-
-    let ig = "https://www.instagram.com/";
-    try {
-      const raw = window.localStorage.getItem("cartcue_links");
-      if (raw) ig = JSON.parse(raw).instagram || ig;
-    } catch {
-      // ignore
-    }
-
-    window.open(ig, "_blank");
-    setIgCopied(true);
-    setTimeout(() => setIgCopied(false), 2000);
-  }
-
-  return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-1">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                tab === t.key
-                  ? "bg-orange-600 text-white"
-                  : "text-neutral-600 hover:bg-neutral-100"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={copyAndOpenInstagram}
-            className="rounded-md bg-gradient-to-r from-pink-600 to-purple-600 px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
-          >
-            {igCopied ? "Copied! Opening…" : "📸 Copy & open Instagram"}
-          </button>
-          {onSave && (
-            <button
-              onClick={onSave}
-              className="rounded-md border border-orange-600 px-3 py-1.5 text-sm font-semibold text-orange-600 hover:bg-orange-50"
-            >
-              {saved ? "Saved ✓" : "Save kit"}
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        {tab === "captions" && (
-          <>
-            <div className="flex justify-end">
-              <CopyButton text={captionsAll} label="Copy all" />
-            </div>
-            {kit.captions.map((c, i) => (
-              <div key={i} className="flex items-start gap-2">
-                <div className="flex-1">
-                  <Block text={c} />
-                </div>
-                <CopyButton text={c} />
-              </div>
-            ))}
-          </>
-        )}
-
-        {tab === "hashtags" && (
-          <>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-neutral-500">
-                {kit.hashtags.length} hashtags
-              </span>
-              <CopyButton text={hashtagsAll} label="Copy all" />
-            </div>
-            <Block text={hashtagsAll} />
-          </>
-        )}
-
-        {tab === "reel" && (
-          <>
-            <div className="flex justify-end">
-              <CopyButton text={reelAll} label="Copy all" />
-            </div>
-            {kit.reelHooks.map((h, i) => (
-              <div key={i} className="flex items-start gap-2">
-                <div className="flex-1">
-                  <Block text={`Hook ${i + 1}: ${h}`} />
-                </div>
-                <CopyButton text={h} />
-              </div>
-            ))}
-            <div className="flex items-start gap-2">
-              <div className="flex-1">
-                <Block text={kit.reelScript} />
-              </div>
-              <CopyButton text={kit.reelScript} />
-            </div>
-          </>
-        )}
-
-        {tab === "stories" && (
-          <>
-            <div className="flex justify-end">
-              <CopyButton text={storiesAll} label="Copy all" />
-            </div>
-            {kit.storySlides.map((s) => (
-              <div key={s.slide} className="flex items-start gap-2">
-                <div className="flex-1">
-                  <Block text={`Slide ${s.slide}: ${s.text}`} />
-                </div>
-                <CopyButton text={s.text} />
-              </div>
-            ))}
-          </>
-        )}
-
-        {tab === "carousel" && (
-          <>
-            <div className="flex justify-end">
-              <CopyButton text={carouselAll} label="Copy all" />
-            </div>
-            {kit.carouselSlides.map((s) => (
-              <div key={s.slide} className="flex items-start gap-2">
-                <div className="flex-1">
-                  <Block text={`Slide ${s.slide} — ${s.title}\n${s.body}`} />
-                </div>
-                <CopyButton text={`${s.title}\n${s.body}`} />
-              </div>
-            ))}
-          </>
-        )}
-
-        {tab === "cta" && (
-          <>
-            <div className="flex items-start gap-2">
-              <div className="flex-1">
-                <Block text={kit.cta} />
-              </div>
-              <CopyButton text={kit.cta} />
-            </div>
-            {kit.disclosure && (
-              <div className="flex items-start gap-2">
-                <div className="flex-1">
-                  <Block text={kit.disclosure} />
-                </div>
-                <CopyButton text={kit.disclosure} />
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  );
-        }
