@@ -1,158 +1,189 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  AMAZON_SUB_SKU,
-  activateAmazonSub,
-  getPlanState,
-} from "@/lib/plan";
-import type { PlanState } from "@/lib/plan";
 
-// When your Amazon checkout / Appstore link is ready, paste it here.
-const AMAZON_PAYMENT_URL = "";
+declare global {
+  interface Window {
+    AmazonIAP?: {
+      purchaseSubscription: (sku: string) => Promise<{
+        success: boolean;
+        receiptId?: string;
+        sku?: string;
+        error?: string;
+      }>;
+      restorePurchases: () => Promise<{
+        success: boolean;
+        purchases?: Array<{
+          sku: string;
+          receiptId?: string;
+        }>;
+        error?: string;
+      }>;
+    };
+  }
+}
+
+const SUBSCRIPTION_SKU = "CartCue_monthly_sub";
 
 export default function SubscriptionPage() {
-  const [state, setState] = useState<PlanState | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [message, setMessage] = useState("");
 
-  useEffect(() => {
-    setState(getPlanState());
-  }, []);
+  const isAmazonApp = () =>
+    typeof window !== "undefined" &&
+    !!window.AmazonIAP;
 
-  function handleAmazon() {
-    if (AMAZON_PAYMENT_URL) {
-      window.open(AMAZON_PAYMENT_URL, "_blank");
+  async function subscribe() {
+    setMessage("");
+
+    if (!isAmazonApp()) {
+      setMessage(
+        "Amazon subscriptions are available in the Amazon Appstore version of CartCue."
+      );
       return;
     }
-    setNotice(
-      `Amazon checkout for ${AMAZON_SUB_SKU} goes live with the Fire/Android app. For the web beta: subscribe on Amazon, then tap "I subscribed on Amazon" to activate Pro.`
-    );
+
+    try {
+      setLoading(true);
+
+      const result = await window.AmazonIAP!.purchaseSubscription(
+        SUBSCRIPTION_SKU
+      );
+
+      if (result.success) {
+        setMessage(
+          "Subscription successful! CartCue Pro is now active."
+        );
+      } else {
+        setMessage(
+          result.error || "The subscription could not be completed."
+        );
+      }
+    } catch (error) {
+      console.error("Amazon subscription error:", error);
+      setMessage("Unable to start the Amazon subscription.");
+    } finally {
+      setLoading(false);
+    }
   }
 
+  async function restorePurchases() {
+    setMessage("");
+
+    if (!isAmazonApp()) {
+      setMessage(
+        "Restore purchases is available in the Amazon Appstore version of CartCue."
+      );
+      return;
+    }
+
+    try {
+      setRestoring(true);
+
+      const result = await window.AmazonIAP!.restorePurchases();
+
+      if (result.success && result.purchases?.length) {
+        const active = result.purchases.some(
+          (purchase) => purchase.sku === SUBSCRIPTION_SKU
+        );
+
+        if (active) {
+          setMessage(
+            "Your CartCue Pro subscription has been restored."
+          );
+        } else {
+          setMessage("No active CartCue Pro subscription was found.");
+        }
+      } else {
+        setMessage(
+          result.error || "No active subscription was found."
+        );
+      }
+    } catch (error) {
+      console.error("Restore subscription error:", error);
+      setMessage("Unable to restore your subscription.");
+    } finally {
+      setRestoring(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!isAmazonApp()) return;
+
+    const restore = async () => {
+      try {
+        await window.AmazonIAP!.restorePurchases();
+      } catch (error) {
+        console.log("Automatic restore skipped:", error);
+      }
+    };
+
+    restore();
+  }, []);
+
   return (
-    <div className="min-h-screen bg-neutral-100">
-      <header className="border-b border-neutral-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
-          <h1 className="text-xl font-bold text-neutral-900">
-            Cart<span className="text-orange-600">Cue</span> Subscription
-          </h1>
-          <a
-            href="/"
-            className="text-sm font-medium text-orange-600 hover:underline"
-          >
-            ← Back to app
-          </a>
-        </div>
-      </header>
+    <main className="min-h-screen bg-white px-6 py-12">
+      <div className="mx-auto max-w-md text-center">
 
-      <main className="mx-auto max-w-5xl space-y-6 px-4 py-8">
-        {state && (
-          <div className="rounded-xl border border-neutral-200 bg-white p-4 text-sm text-neutral-700 shadow-sm">
-            <p>
-              Current plan:{" "}
-              <span className="font-semibold uppercase">{state.plan}</span>
-              {state.plan === "trial" && state.trialEndsAt && (
-                <> · ends {new Date(state.trialEndsAt).toLocaleDateString()}</>
-              )}
-              {state.generationsLeft !== null && (
-                <> · {state.generationsLeft} generations left</>
-              )}
-              {state.plan === "pro" && state.subSku && (
-                <> · SKU: {state.subSku}</>
-              )}
-            </p>
-          </div>
-        )}
+        <h1 className="text-3xl font-bold">
+          CartCue Pro
+        </h1>
 
-        {notice && (
-          <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-            {notice}
-          </div>
-        )}
-
-        <div className="grid gap-6 md:grid-cols-3">
-          <div className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-            <h2 className="font-semibold text-neutral-900">Starter</h2>
-            <p className="mt-1 text-3xl font-bold text-neutral-900">$0</p>
-            <ul className="mt-4 space-y-2 text-sm text-neutral-600">
-              <li>3 content kits / month (after trial)</li>
-              <li>Basic styles</li>
-              <li>Save kits on this device</li>
-            </ul>
-            <a
-              href="/"
-              className="mt-6 block rounded-md border border-neutral-300 px-4 py-2.5 text-center text-sm font-semibold text-neutral-700 hover:bg-neutral-100"
-            >
-              Use free
-            </a>
-            <p className="mt-2 text-center text-[11px] text-neutral-500">
-              Your 7-day Pro trial starts automatically — no button needed.
-            </p>
-          </div>
-
-          <div className="rounded-xl border-2 border-orange-600 bg-white p-6 shadow-md">
-            <p className="text-xs font-semibold uppercase text-orange-600">
-              Most popular
-            </p>
-            <h2 className="mt-1 font-semibold text-neutral-900">
-              Pro Creator
-            </h2>
-            <p className="mt-1 text-3xl font-bold text-neutral-900">
-              $4.99
-              <span className="text-sm font-normal text-neutral-500">/mo</span>
-            </p>
-            <ul className="mt-4 space-y-2 text-sm text-neutral-600">
-              <li>Unlimited content kits</li>
-              <li>All 10 styles + 7 tones</li>
-              <li>AI captions (when enabled)</li>
-              <li>Works on Fire tablets & all devices</li>
-            </ul>
-
-            <button
-              onClick={handleAmazon}
-              className="mt-6 w-full rounded-md bg-amber-400 px-4 py-2.5 text-sm font-semibold text-neutral-900 hover:bg-amber-500"
-            >
-              Subscribe with Amazon — $4.99/mo
-            </button>
-            <button
-              onClick={() => {
-                activateAmazonSub();
-                setState(getPlanState());
-                setNotice("Pro activated with Amazon subscription.");
-              }}
-              className="mt-2 w-full text-xs text-neutral-500 hover:underline"
-            >
-              I subscribed on Amazon — activate Pro
-            </button>
-
-            <p className="mt-3 text-center font-mono text-[11px] text-neutral-400">
-              SKU: {AMAZON_SUB_SKU}
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm opacity-80">
-            <h2 className="font-semibold text-neutral-900">Agency</h2>
-            <p className="mt-1 text-3xl font-bold text-neutral-900">
-              $14.99
-              <span className="text-sm font-normal text-neutral-500">/mo</span>
-            </p>
-            <ul className="mt-4 space-y-2 text-sm text-neutral-600">
-              <li>Everything in Pro</li>
-              <li>Bulk generation</li>
-              <li>Multiple Instagram profiles</li>
-              <li>Priority support</li>
-            </ul>
-            <p className="mt-6 rounded-md border border-neutral-200 px-4 py-2.5 text-center text-sm text-neutral-500">
-              Coming soon
-            </p>
-          </div>
-        </div>
-
-        <p className="text-center text-xs text-neutral-500">
-          7-day free trial starts automatically · cancel anytime · billed
-          monthly via Amazon ({AMAZON_SUB_SKU})
+        <p className="mt-3 text-gray-600">
+          Unlock all CartCue Pro features with a monthly subscription.
         </p>
-      </main>
-    </div>
+
+        <div className="mt-8 rounded-2xl border p-6 shadow-sm">
+
+          <div className="text-4xl font-bold">
+            $4.99
+          </div>
+
+          <div className="mt-1 text-gray-500">
+            per month
+          </div>
+
+          <ul className="mt-6 space-y-3 text-left text-sm">
+            <li>✓ Unlimited CartCue features</li>
+            <li>✓ Pro tools and functionality</li>
+            <li>✓ Continued access while subscribed</li>
+            <li>✓ Cancel through Amazon</li>
+          </ul>
+
+          <button
+            onClick={subscribe}
+            disabled={loading}
+            className="mt-8 w-full rounded-xl bg-black px-5 py-4 font-semibold text-white disabled:opacity-50"
+          >
+            {loading
+              ? "Opening Amazon..."
+              : "Subscribe for $4.99/month"}
+          </button>
+
+          <button
+            onClick={restorePurchases}
+            disabled={restoring}
+            className="mt-3 w-full rounded-xl border px-5 py-3 font-medium disabled:opacity-50"
+          >
+            {restoring
+              ? "Restoring..."
+              : "Restore Purchase"}
+          </button>
+
+          {message && (
+            <div className="mt-5 rounded-xl bg-gray-100 p-4 text-sm">
+              {message}
+            </div>
+          )}
+
+          <p className="mt-5 text-xs text-gray-500">
+            Payments and subscriptions are processed securely
+            through Amazon Appstore.
+          </p>
+
+        </div>
+      </div>
+    </main>
   );
-            }
+}
