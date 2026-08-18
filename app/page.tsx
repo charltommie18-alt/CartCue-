@@ -4,32 +4,45 @@ import { useState } from "react";
 import ProductForm from "@/components/product-form";
 import AccountLinks from "@/components/account-links";
 
-// adjust this to match your ProductForm's expected input type
 type GeneratorInput = {
   productUrl?: string;
+  amazonUrl?: string;
+  productName?: string;
+  price?: string;
   productDescription?: string;
   style?: string;
   platform?: string;
+  affiliateUrl?: string;
   [key: string]: any;
 };
 
-type GeneratedContent = {
-  caption?: string;
-  hooks?: string[];
+type Kit = {
+  productName?: string;
+  amazonUrl?: string;
+  affiliateLink?: string;
+  affiliateTag?: string;
+  price?: string;
+  captions?: string[];
   hashtags?: string[];
-  ideas?: string[];
+  reelHooks?: string[];
+  descriptions?: string[];
+  hooks?: string[];
+  cta?: string;
+  disclosure?: string;
+  reelScript?: string;
   [key: string]: any;
-} | null;
+};
 
 export default function HomePage() {
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<GeneratedContent>(null);
+  const [kit, setKit] = useState<Kit | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const handleGenerate = async (input: GeneratorInput) => {
     setLoading(true);
     setError(null);
-    setResult(null);
+    setKit(null);
     
     try {
       const res = await fetch("/api/generate", {
@@ -39,17 +52,25 @@ export default function HomePage() {
       });
 
       if (!res.ok) {
-        const err = await res.text();
-        throw new Error(err || "Failed to generate");
+        const errData = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(errData.error || "Failed to generate");
       }
 
       const data = await res.json();
-      setResult(data);
+      // FIX: extract kit from { kit: {...} }
+      setKit(data.kit || data);
     } catch (e: any) {
       setError(e.message || "Something went wrong");
     } finally {
       setLoading(false);
     }
+  };
+
+  const copyLink = () => {
+    if (!kit?.affiliateLink) return;
+    navigator.clipboard.writeText(kit.affiliateLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -68,19 +89,15 @@ export default function HomePage() {
           <p className="text-sm font-semibold uppercase tracking-wide text-orange-600">
             Amazon content assistant
           </p>
-
           <h2 className="mt-2 text-4xl font-bold tracking-tight text-neutral-900">
             Turn an Amazon product into ready-to-post social content.
           </h2>
-
           <p className="mt-4 text-lg text-neutral-600">
-            Enter a product, choose your style and generate captions,
-            hooks, hashtags and content ideas for social media.
+            Enter a product, choose your style and generate captions, hooks, hashtags and content ideas.
           </p>
         </div>
 
         <div className="mt-8">
-          {/* FIX: pass the required props */}
           <ProductForm loading={loading} onGenerate={handleGenerate} />
           
           {error && (
@@ -89,16 +106,63 @@ export default function HomePage() {
             </div>
           )}
 
-          {result && (
-            <div className="mt-6 rounded-lg border border-neutral-200 bg-white p-6">
-              <h3 className="font-semibold text-neutral-900">Generated Content</h3>
-              <pre className="mt-4 whitespace-pre-wrap text-sm text-neutral-700">
-                {JSON.stringify(result, null, 2)}
-              </pre>
+          {kit && (
+            <div className="mt-8 space-y-6">
+              {/* PRODUCT + PAYMENT LINK - FIXES YOUR 2 PROBLEMS */}
+              <div className="rounded-xl border-2 border-orange-400 bg-white p-6 shadow-sm">
+                <h3 className="text-lg font-bold">📦 {kit.productName || 'Amazon Product'}</h3>
+                {kit.price && <p className="text-sm text-neutral-600 mt-1">Price: ${kit.price}</p>}
+                
+                <div className="mt-4 bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <p className="text-sm font-bold text-orange-900">💰 YOUR PAYMENT LINK (you earn when they buy):</p>
+                  <div className="mt-2 flex gap-2">
+                    <input 
+                      value={kit.affiliateLink || kit.amazonUrl || ''} 
+                      readOnly 
+                      className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"
+                    />
+                    <button 
+                      onClick={copyLink}
+                      className="rounded-md bg-orange-600 px-4 py-2 text-sm font-bold text-white hover:bg-orange-700"
+                    >
+                      {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                  <a href={kit.affiliateLink || kit.amazonUrl} target="_blank" className="mt-3 inline-block rounded-md bg-black px-4 py-2 text-sm font-bold text-white">
+                    Test Link → Amazon 🛒
+                  </a>
+                </div>
+              </div>
+
+              {/* CONTENT */}
+              <div className="rounded-lg border border-neutral-200 bg-white p-6">
+                <h3 className="font-semibold">Captions</h3>
+                <div className="mt-3 space-y-2">
+                  {(kit.captions || kit.descriptions || []).map((c: string, i: number) => (
+                    <p key={i} className="rounded bg-neutral-50 p-3 text-sm">"{c}"</p>
+                  ))}
+                </div>
+
+                <h3 className="mt-6 font-semibold">Reel Hooks</h3>
+                <div className="mt-3 space-y-2">
+                  {(kit.reelHooks || kit.hooks || []).map((h: string, i: number) => (
+                    <p key={i} className="rounded bg-neutral-50 p-3 text-sm">"{h}"</p>
+                  ))}
+                </div>
+
+                <h3 className="mt-6 font-semibold">Hashtags</h3>
+                <p className="mt-3 text-sm text-neutral-700">
+                  {(kit.hashtags || []).join(' ')}
+                </p>
+
+                {kit.disclosure && (
+                  <p className="mt-6 text-xs text-neutral-500">{kit.disclosure}</p>
+                )}
+              </div>
             </div>
           )}
         </div>
       </section>
     </main>
   );
-                        }
+            }
