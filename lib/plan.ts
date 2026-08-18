@@ -1,126 +1,31 @@
-export type PlanState = {
-  plan: "trial" | "free" | "pro";
-  trialEndsAt: string | null;
-  generationsLeft: number | null;
-  subSku: string | null;
-};
+export type PlanState = { plan: 'trial'|'free'|'pro', trialEndsAt: string | null, generationsLeft: number | null };
 
-export const AMAZON_SUB_SKU = "CartCue_monthly_sub";
-
-const KEY = "cartcue_plan";
-const TRIAL_DAYS = 7;
-const TRIAL_GENERATIONS = 10;
-const FREE_MONTHLY = 3;
-
-type Stored = {
-  trialStartedAt: string | null;
-  pro: boolean;
-  subSku: string | null;
-  monthKey: string;
-  usedThisMonth: number;
-  trialUsed: number;
-};
-
-const EMPTY: Stored = {
-  trialStartedAt: null,
-  pro: false,
-  subSku: null,
-  monthKey: "",
-  usedThisMonth: 0,
-  trialUsed: 0,
-};
-
-function load(): Stored {
-  if (typeof window === "undefined") return EMPTY;
-  try {
-    const raw = window.localStorage.getItem(KEY);
-    if (raw) return { ...EMPTY, ...JSON.parse(raw) };
-  } catch {
-    // ignore
-  }
-  return EMPTY;
-}
-
-function save(s: Stored) {
-  try {
-    window.localStorage.setItem(KEY, JSON.stringify(s));
-  } catch {
-    // ignore
-  }
-}
-
-export function activateAmazonSub() {
-  const s = load();
-  s.pro = true;
-  s.subSku = AMAZON_SUB_SKU;
-  save(s);
-
-  try {
-    fetch("/api/notify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sku: AMAZON_SUB_SKU,
-        at: new Date().toISOString(),
-      }),
-    }).catch(() => {});
-  } catch {
-    // ignore
-  }
-}
+const TRIAL_DAYS = 3;
 
 export function getPlanState(): PlanState {
-  const s = load();
+  if (typeof window === 'undefined') return { plan: 'free', trialEndsAt: null, generationsLeft: 0 };
+  const pro = localStorage.getItem('cartcue_pro') === 'true';
+  if (pro) return { plan: 'pro', trialEndsAt: null, generationsLeft: null };
 
-  if (s.pro)
-    return {
-      plan: "pro",
-      trialEndsAt: null,
-      generationsLeft: null,
-      subSku: s.subSku,
-    };
-
-  if (!s.trialStartedAt) {
-    s.trialStartedAt = new Date().toISOString();
-    save(s);
+  let start = localStorage.getItem('cartcue_trial_start');
+  if (!start) {
+    start = new Date().toISOString();
+    localStorage.setItem('cartcue_trial_start', start);
   }
+  const ends = new Date(new Date(start).getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+  const isExpired = new Date() > ends;
 
-  const end = new Date(s.trialStartedAt).getTime() + TRIAL_DAYS * 86400000;
-  if (Date.now() < end) {
-    return {
-      plan: "trial",
-      trialEndsAt: new Date(end).toISOString(),
-      generationsLeft: Math.max(0, TRIAL_GENERATIONS - s.trialUsed),
-      subSku: null,
-    };
-  }
-
-  const monthKey = new Date().toISOString().slice(0, 7);
-  const used = s.monthKey === monthKey ? s.usedThisMonth : 0;
-  return {
-    plan: "free",
-    trialEndsAt: null,
-    generationsLeft: Math.max(0, FREE_MONTHLY - used),
-    subSku: null,
-  };
+  if (isExpired) return { plan: 'free', trialEndsAt: ends.toISOString(), generationsLeft: 0 };
+  return { plan: 'trial', trialEndsAt: ends.toISOString(), generationsLeft: 999 };
 }
 
-export function consumeGeneration() {
-  const s = load();
-  if (s.pro) return;
-
-  if (s.trialStartedAt) {
-    const end =
-      new Date(s.trialStartedAt).getTime() + TRIAL_DAYS * 86400000;
-    if (Date.now() < end) {
-      s.trialUsed += 1;
-      save(s);
-      return;
-    }
-  }
-
-  const monthKey = new Date().toISOString().slice(0, 7);
-  s.usedThisMonth = s.monthKey === monthKey ? s.usedThisMonth + 1 : 1;
-  s.monthKey = monthKey;
-  save(s);
+export function getTrialTimeLeft(): { hours: number, minutes: number, expired: boolean } {
+  const state = getPlanState();
+  if (!state.trialEndsAt) return { hours: 0, minutes: 0, expired: state.plan!== 'pro' && state.plan!== 'trial' };
+  const diff = new Date(state.trialEndsAt).getTime() - Date.now();
+  if (diff <= 0) return { hours: 0, minutes: 0, expired: true };
+  return { hours: Math.floor(diff / 3600000), minutes: Math.floor((diff % 3600000)/60000), expired: false };
 }
+
+export function consumeGeneration(){}
+export function activatePro(){ localStorage.setItem('cartcue_pro', 'true'); }
