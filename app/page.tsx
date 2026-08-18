@@ -1,7 +1,57 @@
+'use client';
+
+import { useState } from "react";
 import ProductForm from "@/components/product-form";
 import AccountLinks from "@/components/account-links";
 
+// adjust this to match your ProductForm's expected input type
+type GeneratorInput = {
+  productUrl?: string;
+  productDescription?: string;
+  style?: string;
+  platform?: string;
+  [key: string]: any;
+};
+
+type GeneratedContent = {
+  caption?: string;
+  hooks?: string[];
+  hashtags?: string[];
+  ideas?: string[];
+  [key: string]: any;
+} | null;
+
 export default function HomePage() {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<GeneratedContent>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleGenerate = async (input: GeneratorInput) => {
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err || "Failed to generate");
+      }
+
+      const data = await res.json();
+      setResult(data);
+    } catch (e: any) {
+      setError(e.message || "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-neutral-100">
       <header className="border-b border-neutral-200 bg-white">
@@ -30,9 +80,25 @@ export default function HomePage() {
         </div>
 
         <div className="mt-8">
-          <ProductForm />
+          {/* FIX: pass the required props */}
+          <ProductForm loading={loading} onGenerate={handleGenerate} />
+          
+          {error && (
+            <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {result && (
+            <div className="mt-6 rounded-lg border border-neutral-200 bg-white p-6">
+              <h3 className="font-semibold text-neutral-900">Generated Content</h3>
+              <pre className="mt-4 whitespace-pre-wrap text-sm text-neutral-700">
+                {JSON.stringify(result, null, 2)}
+              </pre>
+            </div>
+          )}
         </div>
       </section>
     </main>
   );
-}
+                        }
