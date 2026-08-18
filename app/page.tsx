@@ -38,26 +38,24 @@ export default function HomePage() {
   const [kit, setKit] = useState<Kit | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [subLoading, setSubLoading] = useState(false);
+  const [isPro, setIsPro] = useState(false);
 
   const handleGenerate = async (input: GeneratorInput) => {
     setLoading(true);
     setError(null);
     setKit(null);
-    
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       });
-
       if (!res.ok) {
         const errData = await res.json().catch(() => ({ error: res.statusText }));
         throw new Error(errData.error || "Failed to generate");
       }
-
       const data = await res.json();
-      // FIX: extract kit from { kit: {...} }
       setKit(data.kit || data);
     } catch (e: any) {
       setError(e.message || "Something went wrong");
@@ -71,6 +69,31 @@ export default function HomePage() {
     navigator.clipboard.writeText(kit.affiliateLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleAmazonSubscribe = async () => {
+    setSubLoading(true);
+    try {
+      // @ts-ignore Amazon IAP available inside Amazon Appstore wrapper
+      if (typeof window !== 'undefined' && (window as any).AmazonIAP) {
+        // REAL purchase when app is on Amazon Appstore
+        const result = await (window as any).AmazonIAP.purchase('cartcue_pro_monthly');
+        if (result?.success) {
+          setIsPro(true);
+          localStorage.setItem('cartcue_pro', 'true');
+          alert('Subscribed! Welcome to CartCue Pro 🎉');
+        }
+      } else {
+        // Web preview - show how monthly money works
+        // Replace com.cartcue.app with your real Amazon Appstore package name
+        window.open('https://www.amazon.com/gp/mas/dl/android?p=com.cartcue.app', '_blank');
+        alert('Amazon Subscription:\n\n1. Publish your app to Amazon Appstore\n2. Users tap this button inside the Amazon version\n3. Amazon charges $4.99/month\n4. You get $3.49/month per user via Amazon Payments\n\nFor web testing, this links to Amazon Appstore.');
+      }
+    } catch (e: any) {
+      alert('Subscribe error: ' + e.message);
+    } finally {
+      setSubLoading(false);
+    }
   };
 
   return (
@@ -95,6 +118,21 @@ export default function HomePage() {
           <p className="mt-4 text-lg text-neutral-600">
             Enter a product, choose your style and generate captions, hooks, hashtags and content ideas.
           </p>
+          
+          {/* AMAZON MONTHLY SUBSCRIPTION BUTTON */}
+          <div className="mt-6 rounded-xl border border-neutral-200 bg-white p-4">
+            <p className="text-sm font-bold">{isPro ? '✅ CartCue Pro Active' : '🔓 Unlock CartCue Pro'}</p>
+            <p className="text-xs text-neutral-600 mt-1">Unlimited kits, save history, no watermark. Billed via Amazon.</p>
+            <button
+              onClick={handleAmazonSubscribe}
+              disabled={subLoading || isPro}
+              className="mt-3 w-full rounded-lg bg-black py-3 text-sm font-bold text-white disabled:opacity-50"
+              style={{background: isPro ? '#16a34a' : 'linear-gradient(90deg, #FF9900, #FF6600)'}}
+            >
+              {isPro ? 'Pro Active ✓' : subLoading ? 'Connecting to Amazon...' : 'Subscribe $4.99/month via Amazon'}
+            </button>
+            <p className="mt-2 text- text-center text-neutral-500">Cancel anytime in Amazon Appstore • You keep 70%</p>
+          </div>
         </div>
 
         <div className="mt-8">
@@ -108,7 +146,6 @@ export default function HomePage() {
 
           {kit && (
             <div className="mt-8 space-y-6">
-              {/* PRODUCT + PAYMENT LINK - FIXES YOUR 2 PROBLEMS */}
               <div className="rounded-xl border-2 border-orange-400 bg-white p-6 shadow-sm">
                 <h3 className="text-lg font-bold">📦 {kit.productName || 'Amazon Product'}</h3>
                 {kit.price && <p className="text-sm text-neutral-600 mt-1">Price: ${kit.price}</p>}
@@ -128,41 +165,5 @@ export default function HomePage() {
                       {copied ? 'Copied!' : 'Copy'}
                     </button>
                   </div>
-                  <a href={kit.affiliateLink || kit.amazonUrl} target="_blank" className="mt-3 inline-block rounded-md bg-black px-4 py-2 text-sm font-bold text-white">
-                    Test Link → Amazon 🛒
-                  </a>
-                </div>
-              </div>
-
-              {/* CONTENT */}
-              <div className="rounded-lg border border-neutral-200 bg-white p-6">
-                <h3 className="font-semibold">Captions</h3>
-                <div className="mt-3 space-y-2">
-                  {(kit.captions || kit.descriptions || []).map((c: string, i: number) => (
-                    <p key={i} className="rounded bg-neutral-50 p-3 text-sm">"{c}"</p>
-                  ))}
-                </div>
-
-                <h3 className="mt-6 font-semibold">Reel Hooks</h3>
-                <div className="mt-3 space-y-2">
-                  {(kit.reelHooks || kit.hooks || []).map((h: string, i: number) => (
-                    <p key={i} className="rounded bg-neutral-50 p-3 text-sm">"{h}"</p>
-                  ))}
-                </div>
-
-                <h3 className="mt-6 font-semibold">Hashtags</h3>
-                <p className="mt-3 text-sm text-neutral-700">
-                  {(kit.hashtags || []).join(' ')}
-                </p>
-
-                {kit.disclosure && (
-                  <p className="mt-6 text-xs text-neutral-500">{kit.disclosure}</p>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-    </main>
-  );
-            }
+                  <a href={kit.affiliateLink || kit.amazonUrl} target="_blank" rel="noreferrer" className="mt-3 inline-block rounded-md bg-black px-4 py-2 text-sm font-bold text-white">
+                    Test Link → Amazon 
