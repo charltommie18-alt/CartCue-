@@ -1,5 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 
+async function expandShortUrl(url: string): Promise<string> {
+  try {
+    if (!url.includes('amzn.to')) return url;
+    // Follow redirect
+    const res = await fetch(url, { redirect: 'manual' });
+    const loc = res.headers.get('location');
+    if (loc) return loc;
+    // fallback: follow with fetch
+    const res2 = await fetch(url, { redirect: 'follow' });
+    return res2.url || url;
+  } catch { return url; }
+}
+
 function buildAffiliateLink(url: string, tag: string) {
   if (!url) return `https://www.amazon.com/s?tag=${tag}`;
   try {
@@ -11,58 +24,48 @@ function buildAffiliateLink(url: string, tag: string) {
 
 function getTemplates(name: string) {
   const n = name.toLowerCase();
-  const isWatch = n.includes('watch');
-  const isBlender = n.includes('blender');
-
-  if (isWatch) {
+  if (n.includes('whoop') || n.includes('watch')) {
     return {
       captions: [
         `This ${name} replaced my $300 watch. Heart rate, sleep, notifications - battery lasts 7 days. Under $50 on Amazon.`,
         `If you track workouts but hate charging daily, the ${name} is the Amazon find that actually delivers. Link in bio!`,
       ],
-      hooks: [
-        `Stop scrolling if your smartwatch dies mid-workout`,
-        `This ${name} tracks everything for under $50`,
-        `I tested 3 budget smartwatches - this one won`,
-      ]
+      hooks: [`Stop scrolling if your smartwatch dies mid-workout`, `This ${name} tracks everything for under $50`]
     };
   }
-  // default blender etc
   return {
-    captions: [
-      `I wasn't going to post about ${name}... but it makes smoothies anywhere in seconds. Currently on Amazon!`,
-      `Amazon find that actually delivers. ${name} is perfect for gym, work, travel. Link in bio!`,
-    ],
-    hooks: [
-      `Stop scrolling if you hate cleaning big blenders`,
-      `This ${name} makes smoothies in 20 seconds`,
-    ]
+    captions: [`Love this ${name} - Amazon find that actually delivers. Link in bio!`],
+    hooks: [`You need this ${name}`]
   };
 }
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const productName = body.productName || 'Portable Blender';
-  const amazonUrl = body.amazonUrl || '';
+  const productName = body.productName || 'Whoop smartwatch';
+  let amazonUrl = body.amazonUrl || '';
   const TAG = process.env.AMAZON_TAG || 'cartcue-20';
 
-  const affiliateLink = buildAffiliateLink(amazonUrl, TAG);
+  // Expand amzn.to -> real amazon.com/dp/B0XXXXX
+  const expandedUrl = await expandShortUrl(amazonUrl);
+  
+  const affiliateLink = buildAffiliateLink(expandedUrl || amazonUrl, TAG);
   const tpl = getTemplates(productName);
 
-  // Try to get product image from Amazon URL - Amazon uses /dp/ASIN/
-  const asinMatch = amazonUrl.match(/\/dp\/([A-Z0-9]{10})/i) || amazonUrl.match(/\/product\/([A-Z0-9]{10})/i);
-  const productImage = asinMatch? `https://images-na.ssl-images-amazon.com/images/P/${asinMatch[1]}.jpg` : null;
+  const asinMatch = expandedUrl.match(/\/dp\/([A-Z0-9]{10})/i) || expandedUrl.match(/\/product\/([A-Z0-9]{10})/i) || amazonUrl.match(/([A-Z0-9]{10})/);
+  const asin = asinMatch ? asinMatch[1] : null;
+  const productImage = asin ? `https://images-na.ssl-images-amazon.com/images/P/${asin}.jpg` : null;
 
   const kit = {
     productName,
     amazonUrl,
+    expandedUrl,
     affiliateLink,
-    productImage, // <-- this will show photo
-    price: body.price || 'See price on Amazon',
+    productImage,
+    asin,
     captions: tpl.captions,
     reelHooks: tpl.hooks,
-    hashtags: ['#amazonfinds', '#amazonmusthaves', '#founditonamazon', `#${productName.toLowerCase().replace(/\s+/g,'')}`],
+    hashtags: ['#amazonfinds', '#whoop', '#smartwatch', '#founditonamazon'],
     disclosure: 'As an Amazon Associate I earn from qualifying purchases.',
   };
   return NextResponse.json({ kit });
-      }
+}
