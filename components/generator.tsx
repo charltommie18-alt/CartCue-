@@ -2,20 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 
 async function resolveShortUrl(shortUrl: string): Promise<string> {
   try {
-    // Follow redirects to get the final URL
     const response = await fetch(shortUrl, {
       method: 'HEAD',
       redirect: 'follow',
     });
-    return response.url; // This will be the final Amazon URL after redirect
+    return response.url;
   } catch (error) {
     console.error("Failed to resolve short URL:", error);
-    return shortUrl; // Return original if resolution fails
+    return shortUrl;
   }
 }
 
 function extractASIN(url: string): string | null {
-  // First try to extract from standard Amazon URLs
   const patterns = [
     /(?:dp|gp\/product|exec\/obidos\/asin)\/([A-Z0-9]{10})/i,
     /\/([A-Z0-9]{10})(?:\?|&|\/|$)/,
@@ -42,7 +40,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Resolve shortened URLs (amzn.to) to get the real Amazon URL
     const resolvedUrl = amazonUrl.includes('amzn.to') 
       ? await resolveShortUrl(amazonUrl)
       : amazonUrl;
@@ -59,7 +56,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Return mock data (replace with real API later)
     return NextResponse.json({
       kit: {
         productName: productName || "Smartwatch",
@@ -81,4 +77,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+                }
