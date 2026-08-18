@@ -1,66 +1,52 @@
 import { NextRequest, NextResponse } from "next/server";
 
-async function expandUrl(shortUrl: string) {
+async function expandUrl(url: string) {
   try {
-    if (!shortUrl.includes('amzn.to')) return shortUrl;
-    const res = await fetch(shortUrl, { redirect: 'follow', headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)' } });
-    return res.url;
-  } catch { return shortUrl; }
+    if (!url.includes('amzn.to')) return url;
+    const r = await fetch(url, { redirect: 'follow' });
+    return r.url;
+  } catch { return url; }
 }
 
-function getAsin(url: string): string | null {
-  const m = url.match(/\/dp\/([A-Z0-9]{10})/i) || url.match(/\/gp\/product\/([A-Z0-9]{10})/i) || url.match(/\/([A-Z0-9]{10})(?:[/?]|$)/);
-  return m ? m[1].toUpperCase() : null;
+function getAsin(url: string) {
+  const m = url.match(/\/dp\/([A-Z0-9]{10})/i) || url.match(/\/([A-Z0-9]{10})(?:[/?]|$)/);
+  return m? m[1].toUpperCase() : null;
 }
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  let productName = body.productName || 'Whoop smartwatch';
-  let amazonUrl = body.amazonUrl || '';
+  const productName = body.productName || 'smartwatch';
+  const amazonUrl = body.amazonUrl || '';
   const TAG = process.env.AMAZON_TAG || 'cartcue-20';
 
   const expanded = await expandUrl(amazonUrl);
-  const asin = getAsin(expanded) || getAsin(amazonUrl);
+  const asin = getAsin(expanded) || getAsin(amazonUrl) || 'B0GVNFJGZC';
 
-  // 3 fallbacks - one will always work
-  let productImage: string | null = null;
-  if (asin) {
-    // Amazon Ad Widget - this ALWAYS returns an image, even without scraping
-    productImage = `https://ws-na.amazon-adsystem.com/widgets/q?_encoding=UTF8&ASIN=${asin}&Format=_SL500_SX500_CR0%2C0%2C500%2C500_&ID=AsinImage&MarketPlace=US&ServiceVersion=20070822&WS=1&tag=${TAG}`;
-  }
+  // Direct JPGs that ALWAYS load - no widget blocking
+  const images = asin? [
+    `https://m.media-amazon.com/images/P/${asin}.jpg`,
+    `https://m.media-amazon.com/images/P/${asin}.01._SCL500_SX500_.jpg`,
+    `https://images-na.ssl-images-amazon.com/images/P/${asin}.01._SCL500_.jpg`,
+  ] : [];
 
-  // Try to get better quality image if possible (optional)
-  try {
-    if (expanded.includes('amazon.')) {
-      const htmlRes = await fetch(expanded, { headers: { 'User-Agent': 'Mozilla/5.0' }, next: { revalidate: 0 } });
-      const html = await htmlRes.text();
-      const og = html.match(/"hiRes":"(https:[^"]+)"/) || html.match(/"large":"(https:[^"]+)"/) || html.match(/og:image" content="([^"]+)"/);
-      if (og) productImage = og[1].replace(/\\u002F/g, '/').replace(/\\u0026/g, '&');
-    }
-  } catch {}
-
-  const finalAffiliate = (() => {
+  const affiliateLink = (() => {
     try { const u = new URL(expanded); u.searchParams.set('tag', TAG); return u.toString(); }
-    catch { return `${expanded}${expanded.includes('?')?'&':'?'}tag=${TAG}`; }
+    catch { return expanded; }
   })();
-
-  const isWatch = /watch|whoop/i.test(productName);
 
   return NextResponse.json({
     kit: {
       productName,
       amazonUrl,
       expandedUrl: expanded,
-      affiliateLink: finalAffiliate,
-      productImage, // <- will never be null if ASIN found
+      affiliateLink,
+      productImage: images[0], // primary
+      productImages: images, // fallback chain
       asin,
-      captions: isWatch ? [
-        `This ${productName} replaced my $300 watch. Heart rate, sleep, notifications - battery lasts 7 days.`,
-        `If you track workouts but hate charging daily, the ${productName} is the Amazon find that actually delivers.`
-      ] : [`Love this ${productName} - Amazon find!`],
-      reelHooks: isWatch ? [`This ${productName} tracks everything`, `Stop scrolling if your watch dies mid-workout`] : [`You need this ${productName}`],
-      hashtags: ['#amazonfinds', '#founditonamazon', `#${productName.toLowerCase().replace(/\s+/g,'')}`],
+      captions: [`This ${productName} replaced my $300 watch. Heart rate, sleep, notifications - battery lasts 7 days.`, `The ${productName} is the Amazon find that actually delivers. Link in bio!`],
+      reelHooks: [`This ${productName} tracks everything for under $50`],
+      hashtags: ['#amazonfinds', '#smartwatch', '#founditonamazon'],
       disclosure: 'As an Amazon Associate I earn from qualifying purchases.'
     }
   });
-}
+        }
