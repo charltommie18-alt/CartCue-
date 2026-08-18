@@ -13,12 +13,31 @@ export function loadKits(): SavedKit[] {
 }
 
 export function saveKit(kit: SavedKit) {
-  const kits = loadKits();
-  kits.unshift(kit);
-  window.localStorage.setItem(KEY, JSON.stringify(kits));
+  try {
+    if (typeof window === "undefined") return;
+    const kits = loadKits();
+    kits.unshift(kit);
+    window.localStorage.setItem(KEY, JSON.stringify(kits.slice(0, 100)));
+  } catch {}
 }
 
 export function deleteKit(id: string) {
-  const kits = loadKits().filter((k) => k.id !== id);
-  window.localStorage.setItem(KEY, JSON.stringify(kits));
+  try {
+    if (typeof window === "undefined") return;
+    const kits = loadKits().filter((k) => k.id !== id);
+    window.localStorage.setItem(KEY, JSON.stringify(kits));
+  } catch {}
 }
+
+export function getKitById(id: string): SavedKit | undefined {
+  return loadKits().find((k) => k.id === id);
+}
+
+// FIX FOR RENDER ERROR: saved/page.tsx expects getSavedKits
+export function getSavedKits(): SavedKit[] {
+  return loadKits();
+}
+
+// Aliases so both old and new names work
+export const getKits = loadKits;
+export const listKits = loadKits;
