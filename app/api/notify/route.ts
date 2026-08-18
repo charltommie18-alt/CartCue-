@@ -1,36 +1,24 @@
 import { NextResponse } from "next/server";
-import { sendEmail } from "@/lib/email";
 
-const hits = new Map<string, number[]>();
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
 
-function limited(ip: string): boolean {
-  const now = Date.now();
-  const arr = (hits.get(ip) || []).filter((t) => now - t < 3_600_000);
-  if (arr.length >= 3) {
-    hits.set(ip, arr);
-    return true;
+    console.log("CartCue notification:", body);
+
+    return NextResponse.json({
+      ok: true,
+    });
+  } catch (error) {
+    console.error("Notification error:", error);
+
+    return NextResponse.json(
+      {
+        ok: false,
+      },
+      {
+        status: 400,
+      }
+    );
   }
-  arr.push(now);
-  hits.set(ip, arr);
-  return false;
-}
-
-export async function POST(req: Request) {
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  if (limited(ip)) {
-    return NextResponse.json({ ok: false }, { status: 429 });
-  }
-
-  const body = (await req.json().catch(() => ({}))) as {
-    sku?: string;
-    at?: string;
-  };
-
-  await sendEmail(
-    "🎉 New CartCue subscriber!",
-    `A user activated Pro via Amazon.\nSKU: ${body.sku ?? "CartCue_monthly_sub"}\nTime: ${body.at ?? new Date().toISOString()}`
-  );
-
-  return NextResponse.json({ ok: true });
 }
