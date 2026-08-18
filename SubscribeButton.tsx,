@@ -1,0 +1,46 @@
+'use client';
+import { useState } from 'react';
+
+declare global {
+  interface Window {
+    AmazonIAP?: any;
+  }
+}
+
+export default function SubscribeButton() {
+  const [loading, setLoading] = useState(false);
+
+  const handleSubscribe = async () => {
+    setLoading(true);
+    try {
+      // Check if running inside Amazon Appstore
+      if (typeof window !== 'undefined' && window.AmazonIAP) {
+        // REAL Amazon IAP purchase
+        const result = await window.AmazonIAP.purchase('cartcue_pro_monthly');
+        if (result?.success) {
+          alert('Subscribed! Welcome to CartCue Pro 🎉');
+          localStorage.setItem('cartcue_pro', 'true');
+        }
+      } else {
+        // For web testing / Render - link to Amazon Appstore page
+        alert('To subscribe: Download CartCue from Amazon Appstore, then tap Subscribe. You earn $4.99/month from each user.');
+        window.open('https://www.amazon.com/gp/mas/dl/android?p=com.cartcue.app', '_blank');
+      }
+    } catch (e: any) {
+      alert('Subscribe via Amazon Appstore app: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleSubscribe}
+      disabled={loading}
+      className="w-full mt-4 rounded-xl bg-black text-white font-bold py-4 px-6 text-center"
+      style={{background: 'linear-gradient(90deg, #FF9900, #FF6600)'}}
+    >
+      {loading ? 'Connecting to Amazon...' : '🔓 Unlock Pro - $4.99/month via Amazon'}
+    </button>
+  );
+}
