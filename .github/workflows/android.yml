@@ -1,4 +1,4 @@
-name: Build Android APK (Amazon Appstore IAP)
+name: Build Android APK - CartCue Amazon IAP
 
 on:
   workflow_dispatch:
@@ -6,81 +6,154 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+    steps:
+      - name: Checkout CartCue
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
-      - uses: actions/setup-java@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: "17"
 
       - name: Install dependencies
         run: npm install
 
-      - name: Build web app
+      - name: Build Next.js app
         run: npm run build
 
-      - name: Add Android platform
+      - name: Add Capacitor Android
         run: npx cap add android
 
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Install Amazon Appstore SDK jar
+      - name: Install Amazon Appstore SDK
         run: |
           mkdir -p android/app/libs
-          cp amazon-iap/amazon-appstore-sdk-3.0.9.jar android/app/libs/
+          cp amazon-iap/amazon-appstore-sdk-3.0.9.jar \
+            android/app/libs/amazon-appstore-sdk-3.0.9.jar
 
-      - name: Install Amazon sandbox authentication key
+      - name: Install Amazon authentication key
         run: |
           mkdir -p android/app/src/main/assets
-          cp amazon-iap/AppstoreAuthenticationKey.pem android/app/src/main/assets/
+          cp amazon-iap/AppstoreAuthenticationKey.pem \
+            android/app/src/main/assets/AppstoreAuthenticationKey.pem
 
-      - name: Install Amazon IAP native plugin
+      - name: Install CartCue Amazon IAP plugin
         run: |
           mkdir -p android/app/src/main/java/com/cartcue/app
-          cp amazon-iap/AmazonIAPPlugin.java android/app/src/main/java/com/cartcue/app/
-          cp amazon-iap/MainActivity.java android/app/src/main/java/com/cartcue/app/MainActivity.java
 
-      - name: Add SDK dependency to Gradle
+          cp amazon-iap/AmazonIAPPlugin.java \
+            android/app/src/main/java/com/cartcue/app/AmazonIAPPlugin.java
+
+          cp amazon-iap/MainActivity.java \
+            android/app/src/main/java/com/cartcue/app/MainActivity.java
+
+      - name: Add Amazon SDK to Gradle
+        shell: bash
         run: |
           BUILD_GRADLE="android/app/build.gradle"
-          if ! grep -q "amazon-appstore-sdk-3.0.9.jar" "$BUILD_GRADLE"; then
-            awk '/^dependencies *\{/ && !done {print; print "    implementation files(\x27libs/amazon-appstore-sdk-3.0.9.jar\x27)"; done=1; next} {print}' "$BUILD_GRADLE" > tmp.gradle
-            mv tmp.gradle "$BUILD_GRADLE"
+
+          if ! grep -q \
+            "amazon-appstore-sdk-3.0.9.jar" \
+            "$BUILD_GRADLE"
+          then
+            python3 - <<'PY'
+from pathlib import Path
+
+path = Path("android/app/build.gradle")
+text = path.read_text()
+
+needle = "dependencies {"
+
+if needle not in text:
+    raise SystemExit(
+        "Could not find dependencies block."
+    )
+
+replacement = (
+    needle
+    + "\n"
+    + "    implementation files('libs/amazon-appstore-sdk-3.0.9.jar')"
+)
+
+text = text.replace(
+    needle,
+    replacement,
+    1
+)
+
+path.write_text(text)
+PY
           fi
+
           cat "$BUILD_GRADLE"
 
-      - name: Add libs to Gradle repositories
-        run: |
-          BUILD_GRADLE="android/app/build.gradle"
-          if ! grep -q "flatDir" "$BUILD_GRADLE"; then
-            printf '\nrepositories {\n    flatDir {\n        dirs "libs"\n    }\n}\n' >> "$BUILD_GRADLE"
-          fi
-
-      - name: Patch AndroidManifest for Amazon IAP
+      - name: Patch Android manifest for Amazon IAP
+        shell: bash
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
-          # Permission required by the Amazon In-App Purchasing SDK
-          if ! grep -q "com.amazon.inapp.purchasing.Permission.NOTIFY" "$MANIFEST"; then
-            sed -i 's#<application#<uses-permission android:name="com.amazon.inapp.purchasing.Permission.NOTIFY" />\n\n    <application#' "$MANIFEST"
-          fi
-          # Package visibility (Android 11+) so the app can see the Appstore app
-          if ! grep -q "com.amazon.venezia" "$MANIFEST"; then
-            sed -i 's#<application#<queries>\n        <package android:name="com.amazon.venezia" />\n    </queries>\n\n    <application#' "$MANIFEST"
-          fi
+
+          python3 - <<'PY'
+from pathlib import Path
+
+path = Path(
+    "android/app/src/main/AndroidManifest.xml"
+)
+
+text = path.read_text()
+
+permission = (
+    '<uses-permission '
+    'android:name="com.amazon.inapp.purchasing.Permission.NOTIFY" />'
+)
+
+queries = """<queries>
+        <package android:name="com.amazon.venezia" />
+    </queries>"""
+
+if permission not in text:
+    text = text.replace(
+        "<application",
+        permission + "\n\n    <application",
+        1
+    )
+
+if "<package android:name=\"com.amazon.venezia\"" not in text:
+    text = text.replace(
+        "<application",
+        queries + "\n\n    <application",
+        1
+    )
+
+path.write_text(text)
+PY
+
           cat "$MANIFEST"
 
-      - name: Build APK
-        run: cd android && chmod +x gradlew && ./gradlew assembleDebug
+      - name: Check Android Java files
+        run: |
+          test -f android/app/src/main/java/com/cartcue/app/AmazonIAPPlugin.java
+          test -f android/app/src/main/java/com/cartcue/app/MainActivity.java
+          test -f android/app/libs/amazon-appstore-sdk-3.0.9.jar
+          test -f android/app/src/main/assets/AppstoreAuthenticationKey.pem
+
+      - name: Build debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: cartcue-apk
+          name: cartcue-amazon-iap-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
-          
