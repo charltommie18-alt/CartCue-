@@ -4,18 +4,18 @@ async function resolveShortUrl(shortUrl: string): Promise<string> {
   try {
     const response = await fetch(shortUrl, {
       method: 'GET',
-      redirect: 'manual',
+      redirect: 'follow', // ✅ Follows redirects automatically
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Cache-Control': 'max-age=0'
       }
     });
-    
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      const location = response.headers.get('location');
-      if (location) return location;
-    }
-    
-    return shortUrl;
+    return response.url;
   } catch (error) {
     console.error("Failed to resolve short URL:", error);
     return shortUrl;
@@ -37,6 +37,62 @@ function extractASIN(url: string): string | null {
   return null;
 }
 
+async function fetchProductImage(asin: string, amazonUrl: string): Promise<string> {
+  try {
+    // Fetch the product page with proper headers
+    const response = await fetch(amazonUrl, {
+      method: 'GET',
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive',
+      }
+    });
+
+    const html = await response.text();
+    
+    // Try multiple methods to extract image
+    
+    // Method 1: Look for og:image meta tag
+    const ogImageMatch = html.match(/<meta[^>]*property="og:image"[^>]*content="([^"]*)"/i) ||
+                         html.match(/<meta[^>]*content="([^"]*)"[^>]*property="og:image"/i);
+    if (ogImageMatch && ogImageMatch[1]) {
+      return ogImageMatch[1];
+    }
+
+    // Method 2: Look for data-a-dynamic-image attribute
+    const dynamicImageMatch = html.match(/data-a-dynamic-image='([^']*)'/i);
+    if (dynamicImageMatch && dynamicImageMatch[1]) {
+      try {
+        const imageData = JSON.parse(dynamicImageMatch[1]);
+        if (imageData && typeof imageData === 'object') {
+          const urls = Object.keys(imageData);
+          if (urls.length > 0) return urls[0];
+        }
+      } catch (e) {
+        // JSON parse failed, continue to next method
+      }
+    }
+
+    // Method 3: Look for #landingImage or #imgBlkFront
+    const imgTagMatch = html.match(/<img[^>]*id=["'](landingImage|imgBlkFront)["'][^>]*src=["']([^"]*)["']/i);
+    if (imgTagMatch && imgTagMatch[2]) {
+      return imgTagMatch[2];
+    }
+
+    // Method 4: Fallback to Amazon CDN format
+    return `https://m.media-amazon.com/images/I/61ZjlKoOpwL._AC_SL1500_.jpg`;
+
+  } catch (error) {
+    console.error("Failed to fetch product image:", error);
+    // Return fallback image
+    return `https://m.media-amazon.com/images/I/61ZjlKoOpwL._AC_SL1500_.jpg`;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -49,6 +105,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Resolve shortened URLs
     const resolvedUrl = amazonUrl.includes('amzn.to') 
       ? await resolveShortUrl(amazonUrl)
       : amazonUrl;
@@ -65,34 +122,32 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Generate better captions and hashtags based on product
-    const productKeywords = productName?.toLowerCase() || "smartwatch";
-    
+    // Fetch the real product image
+    const productImage = await fetchProductImage(asin, resolvedUrl);
+
+    console.log("Extracted Image URL:", productImage);
+
     return NextResponse.json({
       kit: {
-        productName: productName || "Smart Watch",
-        // Use Amazon's image CDN format
-        productImage: `https://m.media-amazon.com/images/I/61ZjlKoOpwL._AC_SL1500_.jpg`,
+        productName: productName || "Amazon Product",
+        productImage: productImage,
         asin: asin,
         affiliateLink: resolvedUrl.includes("tag=") ? resolvedUrl : `${resolvedUrl}?tag=yourid-20`,
         captions: [
-          `Just found this ${productKeywords} on Amazon! 🎯 Perfect for ${productKeywords.includes('watch') ? 'tracking workouts and staying connected' : 'elevating your daily routine'}. Link in bio! #AmazonFinds #MustHave`,
-          
-          `This ${productKeywords} is a game changer! 💯 ${productKeywords.includes('watch') ? 'Battery lasts forever + tracks everything' : 'Worth every penny'}. Grab yours before it sells out! 🔥 #TechDeals #Amazon`,
-          
-          `POV: You found the perfect ${productKeywords} that doesn't break the bank 💸✨ ${productKeywords.includes('watch') ? 'Sleep tracking, heart rate, steps - it does it all' : 'Quality meets affordability'}. #SmartShopping #AmazonFinds`
+          `🚨 Amazon Find Alert! Just found this amazing product and I'm obsessed. 😍 Perfect for leveling up your daily routine. Link in bio! 👇 #AmazonFinds #MustHave`,
+          `POV: You finally found the perfect product that doesn't break the bank. 💸✨ 10/10 recommend. Tap the link to shop! 🛒 #TikTokMadeMeBuyIt #AmazonDeals`,
+          `Stop scrolling! 🛑 This is the ultimate game-changer. I don't know how I lived without it. 🔥 Get yours before it sells out! #SmartShopping #Amazon`
         ],
         hashtags: [
-          `#${productKeywords.replace(/\s/g, '')}`,
           "#AmazonFinds",
-          "#TechDeals",
-          "#MustHave",
           "#AmazonMustHaves",
           "#TikTokMadeMeBuyIt",
-          "#ProductReview",
+          "#TechDeals",
           "#OnlineShopping",
           "#DealAlert",
-          "#SmartBuy"
+          "#SmartBuy",
+          "#ProductReview",
+          `#${asin}`
         ]
       }
     });
@@ -104,4 +159,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-      }
+}
