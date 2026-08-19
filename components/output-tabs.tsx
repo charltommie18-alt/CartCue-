@@ -24,6 +24,11 @@ export default function OutputTabs({ kit, onSave, saved }: any) {
   
   const allText = `${kit.productName}\n\n${kit.captions?.join('\n\n')}\n\n${kit.hashtags?.join(' ')}`;
 
+  // Fix: Use a proxy for Amazon images to bypass hotlink protection
+  const displayImage = kit.productImage 
+    ? `https://corsproxy.io/?${encodeURIComponent(kit.productImage)}`
+    : "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=500&q=80";
+
   return (
     <div className="space-y-4">
       {/* Product Card with Image */}
@@ -34,22 +39,17 @@ export default function OutputTabs({ kit, onSave, saved }: any) {
         </div>
         
         <div className="flex gap-4">
-          {/* Product Image */}
+          {/* Product Image - Now using proxy */}
           <div className="flex-shrink-0">
-            {kit.productImage ? (
-              <img 
-                src={kit.productImage} 
-                alt={kit.productName}
-                className="h-32 w-32 rounded-xl border border-gray-200 object-cover bg-white"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = "https://via.placeholder.com/128?text=No+Image";
-                }}
-              />
-            ) : (
-              <div className="h-32 w-32 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center">
-                <span className="text-xs text-gray-400">No Image</span>
-              </div>
-            )}
+            <img 
+              src={displayImage} 
+              alt={kit.productName}
+              className="h-32 w-32 rounded-xl border border-gray-200 object-cover bg-white"
+              onError={(e) => {
+                // Ultimate fallback if proxy fails
+                (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=500&q=80";
+              }}
+            />
           </div>
           
           <div className="flex-1 space-y-3">
@@ -124,4 +124,4 @@ export default function OutputTabs({ kit, onSave, saved }: any) {
       </div>
     </div>
   );
-            }
+          }
