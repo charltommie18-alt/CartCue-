@@ -91,3 +91,4 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+export default Generator;
