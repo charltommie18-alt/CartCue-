@@ -1,49 +1,127 @@
 'use client';
-import { useState } from "react";
 
-function Copy({ text, label='Copy' }: { text: string, label?: string }) {
-  const [ok,setOk]=useState(false);
-  return <button onClick={()=>{navigator.clipboard.writeText(text); setOk(true); setTimeout(()=>setOk(false),1000)}} className="rounded-full border px-3 py-1.5 text-xs font-bold bg-white">{ok?'Copied':'Copy'}</button>
+function CopyBtn({ text, label = "Copy" }: { text: string; label?: string }) {
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  return (
+    <button 
+      onClick={handleCopy}
+      className="rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 transition shadow-sm"
+    >
+      {label}
+    </button>
+  );
 }
 
-export default function OutputTabs({ kit }: { kit: any, onSave: any, saved: any }) {
-  const [imgIdx, setImgIdx] = useState(0);
-  const imgs = kit.productImages || [kit.productImage];
-  const link = kit.affiliateLink;
+export default function OutputTabs({ kit, onSave, saved }: any) {
+  if (!kit) return null;
+  
+  const allText = `${kit.productName}\n\n${kit.captions?.join('\n\n')}\n\n${kit.hashtags?.join(' ')}`;
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border bg-white p-4">
-        <div className="flex justify-between"><p className="font-bold">{kit.productName}</p><Copy text={`${kit.productName}\n${link}\n\n${kit.captions.join('\n\n')}`} label="Copy All" /></div>
-        <div className="mt-3 flex gap-4">
-          <div className="h-24 w-24 rounded-xl bg-neutral-50 border overflow-hidden flex items-center justify-center">
-            {imgs[imgIdx]? (
-              <img
-                src={imgs[imgIdx]}
+      {/* Product Card with Image */}
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="flex justify-between items-start mb-4">
+          <h2 className="text-xl font-bold text-gray-900">{kit.productName}</h2>
+          <CopyBtn text={allText} label="Copy All" />
+        </div>
+        
+        <div className="flex gap-4">
+          {/* Product Image */}
+          <div className="flex-shrink-0">
+            {kit.productImage ? (
+              <img 
+                src={kit.productImage} 
                 alt={kit.productName}
-                className="h-full w-full object-contain"
-                onError={()=>{ if(imgIdx < imgs.length-1) setImgIdx(imgIdx+1); }}
-                referrerPolicy="no-referrer"
+                className="h-32 w-32 rounded-xl border border-gray-200 object-cover bg-white"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = "https://via.placeholder.com/128?text=No+Image";
+                }}
               />
-            ) : <span className="text-">No photo</span>}
+            ) : (
+              <div className="h-32 w-32 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center">
+                <span className="text-xs text-gray-400">No Image</span>
+              </div>
+            )}
           </div>
-          <div>
-            <p className="text-xs text-neutral-500">ASIN: {kit.asin}</p>
-            <a href={link} target="_blank" className="mt-2 inline-block rounded-full bg-[#FFC83D] px-4 py-2 text-xs font-bold">🛒 View on Amazon</a>
-            <div className="mt-2"><Copy text={`${kit.productName} - ${link}`} label="Copy Watch + Link" /></div>
+          
+          <div className="flex-1 space-y-3">
+            <p className="text-xs text-gray-500 font-mono">ASIN: {kit.asin || 'N/A'}</p>
+            
+            <a 
+              href={kit.affiliateLink} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-flex items-center rounded-full bg-yellow-400 px-5 py-2.5 text-sm font-bold text-gray-900 hover:bg-yellow-500 transition shadow-sm"
+            >
+              🛒 View on Amazon
+            </a>
+            
+            <div className="flex gap-2">
+              <input 
+                value={kit.affiliateLink || ''} 
+                readOnly 
+                className="flex-1 rounded-full bg-gray-100 px-3 py-2 text-xs text-gray-600 truncate border border-gray-200" 
+              />
+              <CopyBtn text={kit.affiliateLink || ''} label="Copy" />
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border bg-white p-4">
-        <p className="font-bold text-sm">Affiliate Link</p>
-        <div className="mt-2 flex gap-2"><input value={link} readOnly className="flex-1 rounded-full bg-neutral-100 px-3 py-2 text-xs" /><Copy text={link} /></div>
+      {/* Affiliate Link Card */}
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="flex justify-between items-center mb-3">
+          <p className="font-bold text-gray-900">Affiliate Link</p>
+          <CopyBtn text={kit.affiliateLink || ''} label="Copy Link" />
+        </div>
+        <div className="flex gap-2">
+          <input 
+            value={kit.affiliateLink || ''} 
+            readOnly 
+            className="flex-1 rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-700 border border-gray-200" 
+          />
+          <CopyBtn text={kit.affiliateLink || ''} label="Copy" />
+        </div>
       </div>
 
-      <div className="rounded-2xl border bg-white p-4">
-        <p className="font-bold">Captions</p>
-        {kit.captions.map((c:string,i:number)=><div key={i} className="mt-3 rounded-xl bg-neutral-50 p-3 text-sm flex justify-between gap-2"><span>{c}</span><Copy text={c} /></div>)}
+      {/* Captions Card */}
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="flex justify-between items-center mb-4">
+          <p className="font-bold text-gray-900">Captions</p>
+          <CopyBtn text={kit.captions?.join('\n\n') || ''} label="Copy All" />
+        </div>
+        <div className="space-y-3">
+          {kit.captions?.map((c: string, i: number) => (
+            <div key={i} className="rounded-xl bg-gray-50 p-4 text-sm text-gray-700 border border-gray-200">
+              <div className="flex justify-between items-start gap-3">
+                <span className="flex-1">{c}</span>
+                <CopyBtn text={c} label="Copy" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Hashtags Card */}
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="flex justify-between items-center mb-3">
+          <p className="font-bold text-gray-900">Hashtags</p>
+          <CopyBtn text={kit.hashtags?.join(' ') || ''} label="Copy All" />
+        </div>
+        <div className="rounded-xl bg-gray-50 p-4 border border-gray-200">
+          <p className="text-sm text-gray-700 leading-relaxed">
+            {kit.hashtags?.join(' ')}
+          </p>
+        </div>
       </div>
     </div>
   );
-                                                                                                                                                               }
+            }
