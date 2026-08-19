@@ -156,13 +156,12 @@ export default function Generator() {
                 kit={kit} 
                 onSave={() => {}} 
                 saved={false} 
-                onCopy={() => {}} 
               />
             )}
             
             {!kit && !loading && !error && (
               <div className="h-full min-h-[400px] rounded-2xl border-2 border-dashed border-gray-300 bg-white/50 p-8 flex flex-col items-center justify-center text-center">
-                <div className="text-6xl mb-4"></div>
+                <div className="text-6xl mb-4">📦</div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
                   Ready to Generate
                 </h3>
@@ -187,4 +186,4 @@ export default function Generator() {
       </main>
     </div>
   );
-  }
+}
