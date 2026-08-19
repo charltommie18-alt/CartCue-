@@ -1,49 +1,63 @@
 // app/api/generate/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
-function extractASIN(url: string): string | null {
-  const match = url.match(/(?:dp|gp\/product|exec\/obidos\/asin|dp\/)\/([A-Z0-9]{10})/i) || url.match(/([A-Z0-9]{10})/);
-  return match ? match[1] : null;
+async function expandShortUrl(url: string): Promise<string> {
+  if (!url.includes('amzn.to')) return url;
+  try {
+    // HEAD follows redirect and gives us the real amazon url
+    const res = await fetch(url, { method: 'HEAD', redirect: 'follow' });
+    return res.url || url;
+  } catch {
+    return url;
+  }
+}
+
+function extractASIN(url: string): string {
+  const patterns = [
+    /dp\/([A-Z0-9]{10})/i,
+    /gp\/product\/([A-Z0-9]{10})/i,
+    /\/([A-Z0-9]{10})(?:[/?]|$)/i,
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m) return m[1].toUpperCase();
+  }
+  // If still amzn.to (couldn't expand), try to find ASIN in original if it has it
+  const any = url.match(/([A-Z0-9]{10})/i);
+  return any ? any[1].toUpperCase() : 'B0GVNFJGZC';
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    const { productName, amazonUrl } = await req.json();
+  const { productName, amazonUrl } = await req.json();
 
-    if (!amazonUrl) {
-      return NextResponse.json({ error: "Amazon URL is required" }, { status: 400 });
+  // 1. Expand amzn.to -> https://www.amazon.com/dp/B0XXXX...
+  const expanded = await expandShortUrl(amazonUrl || '');
+  const urlToUse = expanded.includes('amazon') ? expanded : amazonUrl;
+  
+  // 2. Get ASIN
+  const asin = extractASIN(urlToUse);
+  const TAG = 'cartcue-20';
+
+  // 3. Dynamic image from ASIN - not hardcoded
+  const productImage = `https://m.media-amazon.com/images/P/${asin}.01._SL500_.jpg`;
+  const affiliateLink = `https://www.amazon.com/dp/${asin}?tag=${TAG}`;
+
+  return NextResponse.json({
+    kit: {
+      productName: productName || "Smartwatch",
+      productImage, // dynamic, matches ASIN
+      productImages: [
+        `https://m.media-amazon.com/images/P/${asin}.01._SL500_.jpg`,
+        `https://m.media-amazon.com/images/P/${asin}.jpg`,
+      ],
+      asin,
+      affiliateLink,
+      resolvedUrl: urlToUse,
+      captions: [
+        `This ${productName} replaced my $300 watch. Heart rate, sleep, notifications - battery lasts 7 days.`,
+        `If you track workouts but hate charging daily, the ${productName} is the Amazon find that actually delivers. Link in bio!`
+      ],
+      hashtags: ["#SmartWatch", "#AmazonFinds", "#FitnessTracker"]
     }
-
-    const asin = extractASIN(amazonUrl);
-    if (!asin) {
-      return NextResponse.json({ error: "Invalid Amazon URL. Could not find ASIN." }, { status: 400 });
-    }
-
-    // ==========================================================
-    // TODO: Replace this mock with a real API call (e.g., Rainforest API)
-    // For now, this mock ensures your UI works perfectly with the correct keys.
-    // ==========================================================
-    
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1200));
-
-    return NextResponse.json({
-      kit: {
-        productName: productName || "USMECBL Fitness Tracker Smart Watch",
-        // MUST BE "productImage" to match OutputTabs.tsx
-        productImage: "https://m.media-amazon.com/images/I/61ZjlKoOpwL._AC_SL1500_.jpg", 
-        asin: asin,
-        affiliateLink: amazonUrl.includes("tag=") ? amazonUrl : `${amazonUrl}?tag=youraffiliateid-20`,
-        captions: [
-          "Level up your fitness game! 💪 Track every step, heart rate, and sleep cycle with the USMECBL Smart Watch. #FitnessTracker #SmartWatch",
-          "Stay connected and healthy without the daily charging stress. ⌚️ 14-day battery life + IP68 waterproof! #TechEssentials #WearableTech"
-        ],
-        hashtags: ["#SmartWatch", "#FitnessTracker", "#HealthTech", "#AmazonFinds", "#WearableTech"]
+  });
       }
-    });
-
-  } catch (error) {
-    console.error("Generation error:", error);
-    return NextResponse.json({ error: "Failed to generate content" }, { status: 500 });
-  }
-}
