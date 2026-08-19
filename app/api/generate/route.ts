@@ -15,19 +15,15 @@ async function resolveShortUrl(shortUrl: string): Promise<string> {
       redirect: "follow",
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128.0.0.0 Safari/537.36",
         Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
       },
       cache: "no-store",
     });
 
-    if (response.url) {
-      return response.url;
-    }
-
-    return shortUrl;
+    return response.url || shortUrl;
   } catch (error) {
     console.error("Failed to resolve Amazon short URL:", error);
     return shortUrl;
@@ -42,21 +38,15 @@ function extractASIN(url: string): string | null {
     /\/gp\/product\/([A-Z0-9]{10})(?:[/?#&]|$)/i,
     /\/gp\/aw\/d\/([A-Z0-9]{10})(?:[/?#&]|$)/i,
     /\/exec\/obidos\/ASIN\/([A-Z0-9]{10})(?:[/?#&]|$)/i,
-    /\/product\/([A-Z0-9]{10})(?:[/?#&]|$)/i,
     /(?:^|[?&])asin=([A-Z0-9]{10})(?:[&#]|$)/i,
-    /(?:^|\/)([A-Z0-9]{10})(?:[/?#&]|$)/i,
   ];
 
-  for (const pattern of patterns) {
-    const match = decoded.match(pattern);
+  for (let i = 0; i < patterns.length; i++) {
+    const match = decoded.match(patterns[i]);
 
-    if (match?.[1]) {
+    if (match && match[1]) {
       return match[1].toUpperCase();
     }
-  }
-
-  if (/^[A-Z0-9]{10}$/i.test(decoded.trim())) {
-    return decoded.trim().toUpperCase();
   }
 
   return null;
@@ -71,37 +61,45 @@ function extractAmazonImageFromHtml(html: string): string | null {
     const cleaned = cleanUrl(value);
 
     if (
-      cleaned.startsWith("https://m.media-amazon.com/") ||
-      cleaned.startsWith("https://images-na.ssl-images-amazon.com/") ||
-      cleaned.startsWith("https://images.amazon.com/")
+      cleaned.indexOf("https://m.media-amazon.com/") === 0 ||
+      cleaned.indexOf("https://images-na.ssl-images-amazon.com/") === 0 ||
+      cleaned.indexOf("https://images.amazon.com/") === 0
     ) {
-      candidates.push(cleaned);
+      if (candidates.indexOf(cleaned) === -1) {
+        candidates.push(cleaned);
+      }
     }
   }
 
-  // 1. Open Graph image
-  const ogImagePatterns = [
+  // Open Graph image
+  const ogPatterns = [
     /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
     /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
   ];
 
-  for (const pattern of ogImagePatterns) {
-    const match = html.match(pattern);
-    if (match?.[1]) addCandidate(match[1]);
+  for (let i = 0; i < ogPatterns.length; i++) {
+    const match = html.match(ogPatterns[i]);
+
+    if (match && match[1]) {
+      addCandidate(match[1]);
+    }
   }
 
-  // 2. Twitter image
-  const twitterImagePatterns = [
+  // Twitter image
+  const twitterPatterns = [
     /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
     /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i,
   ];
 
-  for (const pattern of twitterImagePatterns) {
-    const match = html.match(pattern);
-    if (match?.[1]) addCandidate(match[1]);
+  for (let i = 0; i < twitterPatterns.length; i++) {
+    const match = html.match(twitterPatterns[i]);
+
+    if (match && match[1]) {
+      addCandidate(match[1]);
+    }
   }
 
-  // 3. Amazon landing image / high resolution image data
+  // Amazon image JSON fields
   const jsonPatterns = [
     /"landingImageUrl"\s*:\s*"([^"]+)"/i,
     /"hiRes"\s*:\s*"([^"]+)"/i,
@@ -110,21 +108,32 @@ function extractAmazonImageFromHtml(html: string): string | null {
     /"imageUrl"\s*:\s*"([^"]+)"/i,
   ];
 
-  for (const pattern of jsonPatterns) {
-    const match = html.match(pattern);
-    if (match?.[1]) addCandidate(match[1]);
+  for (let i = 0; i < jsonPatterns.length; i++) {
+    const match = html.match(jsonPatterns[i]);
+
+    if (match && match[1]) {
+      addCandidate(match[1]);
+    }
   }
 
-  // 4. Amazon dynamic image data
-  const dynamicImageMatches = html.matchAll(
-    /data-a-dynamic-image=["']([^"']+)["']/gi
-  );
+  /*
+   * Amazon dynamic image data.
+   *
+   * IMPORTANT:
+   * This uses RegExp.exec() instead of for...of/matchAll(),
+   * because the CartCue project is compiled with an older
+   * TypeScript target.
+   */
+  const dynamicImageRegex =
+    /data-a-dynamic-image=["']([^"']+)["']/gi;
 
-  for (const match of dynamicImageMatches) {
-    if (!match[1]) continue;
+  let dynamicMatch: RegExpExecArray | null;
+
+  while ((dynamicMatch = dynamicImageRegex.exec(html)) !== null) {
+    if (!dynamicMatch[1]) continue;
 
     try {
-      const decoded = match[1]
+      const decoded = dynamicMatch[1]
         .replace(/&quot;/g, '"')
         .replace(/&#34;/g, '"')
         .replace(/&amp;/g, "&");
@@ -132,37 +141,44 @@ function extractAmazonImageFromHtml(html: string): string | null {
       const imageData = JSON.parse(decoded);
 
       if (imageData && typeof imageData === "object") {
-        for (const imageUrl of Object.keys(imageData)) {
-          addCandidate(imageUrl);
+        const imageUrls = Object.keys(imageData);
+
+        for (let i = 0; i < imageUrls.length; i++) {
+          addCandidate(imageUrls[i]);
         }
       }
     } catch {
-      // Ignore malformed dynamic-image data and continue.
+      // Ignore malformed image data.
     }
   }
 
-  // 5. Search directly for Amazon image CDN URLs
-  const directImageMatches = html.matchAll(
-    /https:\/\/m\.media-amazon\.com\/images\/I\/[A-Za-z0-9._%-]+/gi
-  );
+  // Direct Amazon image URLs
+  const directImageRegex =
+    /https:\/\/m\.media-amazon\.com\/images\/I\/[A-Za-z0-9._%~-]+/gi;
 
-  for (const match of directImageMatches) {
-    if (match[0]) addCandidate(match[0]);
+  let directMatch: RegExpExecArray | null;
+
+  while ((directMatch = directImageRegex.exec(html)) !== null) {
+    if (directMatch[0]) {
+      addCandidate(directMatch[0]);
+    }
   }
 
   if (candidates.length === 0) {
     return null;
   }
 
-  // Prefer larger-looking images.
-  const preferred = candidates.find(
-    (url) =>
-      url.includes("_SL") ||
-      url.includes("_AC_SL") ||
-      url.includes(".jpg")
-  );
+  // Prefer high-resolution Amazon images.
+  for (let i = 0; i < candidates.length; i++) {
+    if (
+      candidates[i].indexOf("_SL") !== -1 ||
+      candidates[i].indexOf("_AC_SL") !== -1
+    ) {
+      return candidates[i];
+    }
+  }
 
-  return preferred || candidates[0];
+  return candidates[0];
 }
 
 async function getAmazonProductImage(
@@ -171,20 +187,20 @@ async function getAmazonProductImage(
 ): Promise<string | null> {
   const productUrls = [
     amazonUrl,
-    `https://www.amazon.com/dp/${asin}`,
-    `https://www.amazon.com/gp/product/${asin}`,
+    "https://www.amazon.com/dp/" + asin,
+    "https://www.amazon.com/gp/product/" + asin,
   ];
 
-  for (const productUrl of productUrls) {
+  for (let i = 0; i < productUrls.length; i++) {
     try {
-      const response = await fetch(productUrl, {
+      const response = await fetch(productUrls[i], {
         method: "GET",
         redirect: "follow",
         headers: {
           "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128.0.0.0 Safari/537.36",
           Accept:
-            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
           "Accept-Language": "en-US,en;q=0.9",
           "Cache-Control": "no-cache",
         },
@@ -196,7 +212,6 @@ async function getAmazonProductImage(
       }
 
       const html = await response.text();
-
       const image = extractAmazonImageFromHtml(html);
 
       if (image) {
@@ -209,20 +224,21 @@ async function getAmazonProductImage(
   }
 
   /*
-   * Final ASIN-based fallback.
-   *
-   * Amazon commonly exposes the primary product image using this
-   * legacy image endpoint. This is only used when the product page
-   * does not expose an image directly.
+   * Final ASIN image fallback.
    */
   const fallbackImages = [
-    `https://images-na.ssl-images-amazon.com/images/P/${asin}.01.LZZZZZZZ.jpg`,
-    `https://images.amazon.com/images/P/${asin}.01.LZZZZZZZ.jpg`,
+    "https://images-na.ssl-images-amazon.com/images/P/" +
+      asin +
+      ".01.LZZZZZZZ.jpg",
+
+    "https://images.amazon.com/images/P/" +
+      asin +
+      ".01.LZZZZZZZ.jpg",
   ];
 
-  for (const fallback of fallbackImages) {
+  for (let i = 0; i < fallbackImages.length; i++) {
     try {
-      const response = await fetch(fallback, {
+      const response = await fetch(fallbackImages[i], {
         method: "HEAD",
         redirect: "follow",
         headers: {
@@ -232,11 +248,15 @@ async function getAmazonProductImage(
       });
 
       if (response.ok) {
-        console.log("Using Amazon ASIN image fallback:", fallback);
-        return fallback;
+        console.log(
+          "Using Amazon ASIN image fallback:",
+          fallbackImages[i]
+        );
+
+        return fallbackImages[i];
       }
     } catch {
-      // Try the next fallback.
+      // Try next fallback.
     }
   }
 
@@ -247,64 +267,80 @@ function buildAffiliateLink(
   resolvedUrl: string,
   asin: string
 ): string {
-  const tag = process.env.AMAZON_AFFILIATE_TAG || "ctfun-20";
+  const tag =
+    process.env.AMAZON_AFFILIATE_TAG || "ctfun-20";
 
   try {
     const url = new URL(resolvedUrl);
 
-    // Make sure the product remains the same while adding the
-    // user's Amazon Associates tracking tag.
-    if (url.hostname.includes("amazon.")) {
+    if (url.hostname.indexOf("amazon.") !== -1) {
       url.searchParams.set("tag", tag);
       return url.toString();
     }
   } catch {
-    // Fall through to the ASIN URL below.
+    // Use ASIN URL below.
   }
 
-  return `https://www.amazon.com/dp/${asin}?tag=${encodeURIComponent(
-    tag
-  )}`;
+  return (
+    "https://www.amazon.com/dp/" +
+    asin +
+    "?tag=" +
+    encodeURIComponent(tag)
+  );
 }
 
-function createProductKeywords(productName: string): string {
-  return productName?.trim().toLowerCase() || "amazon product";
+function createProductKeywords(
+  productName: string
+): string {
+  return productName
+    ? productName.trim().toLowerCase()
+    : "amazon product";
 }
 
-function createCaptions(productKeywords: string): string[] {
+function createCaptions(
+  productKeywords: string
+): string[] {
   const isWatch =
-    productKeywords.includes("watch") ||
-    productKeywords.includes("smartwatch");
+    productKeywords.indexOf("watch") !== -1 ||
+    productKeywords.indexOf("smartwatch") !== -1;
 
   return [
-    `Just found this ${productKeywords} on Amazon! 🎯 Perfect for ${
-      isWatch
+    "Just found this " +
+      productKeywords +
+      " on Amazon! 🎯 Perfect for " +
+      (isWatch
         ? "tracking workouts and staying connected"
-        : "elevating your daily routine"
-    }. Link in bio! #AmazonFinds #MustHave`,
+        : "elevating your daily routine") +
+      ". Link in bio! #AmazonFinds #MustHave",
 
-    `This ${productKeywords} is a game changer! 💯 ${
-      isWatch
+    "This " +
+      productKeywords +
+      " is a game changer! 💯 " +
+      (isWatch
         ? "Battery lasts forever + tracks everything"
-        : "Worth checking out if you're looking for something useful and practical"
-    }. Grab yours before it sells out! 🔥 #TechDeals #Amazon`,
+        : "Worth checking out if you're looking for something useful and practical") +
+      ". Grab yours before it sells out! 🔥 #TechDeals #Amazon",
 
-    `POV: You found the perfect ${productKeywords} that doesn't break the bank 💸✨ ${
-      isWatch
+    "POV: You found the perfect " +
+      productKeywords +
+      " that doesn't break the bank 💸✨ " +
+      (isWatch
         ? "Sleep tracking, heart rate, steps - it does it all"
-        : "Quality meets affordability"
-    }. #SmartShopping #AmazonFinds`,
+        : "Quality meets affordability") +
+      ". #SmartShopping #AmazonFinds",
   ];
 }
 
-function createHashtags(productKeywords: string): string[] {
+function createHashtags(
+  productKeywords: string
+): string[] {
   const cleanProductTag = productKeywords
     .replace(/[^a-zA-Z0-9]/g, "")
-    .slice(0, 50);
+    .substring(0, 50);
 
   return [
     cleanProductTag
-      ? `#${cleanProductTag}`
+      ? "#" + cleanProductTag
       : "#AmazonProduct",
     "#AmazonFinds",
     "#TechDeals",
@@ -323,12 +359,12 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     const productName =
-      typeof body?.productName === "string"
+      typeof body.productName === "string"
         ? body.productName.trim()
         : "";
 
     const amazonUrl =
-      typeof body?.amazonUrl === "string"
+      typeof body.amazonUrl === "string"
         ? body.amazonUrl.trim()
         : "";
 
@@ -343,18 +379,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log("Original Amazon URL:", amazonUrl);
+    console.log(
+      "Original Amazon URL:",
+      amazonUrl
+    );
 
-    // Resolve amzn.to and other Amazon redirects.
-    const resolvedUrl = await resolveShortUrl(amazonUrl);
+    // Resolve amzn.to link.
+    const resolvedUrl =
+      await resolveShortUrl(amazonUrl);
 
-    console.log("Resolved Amazon URL:", resolvedUrl);
+    console.log(
+      "Resolved Amazon URL:",
+      resolvedUrl
+    );
 
-    // Extract the real ASIN from the final Amazon URL.
+    // Get ASIN from resolved URL.
     let asin = extractASIN(resolvedUrl);
 
-    // If the redirect did not expose the ASIN, also try the
-    // original URL.
+    // Try original URL as well.
     if (!asin) {
       asin = extractASIN(amazonUrl);
     }
@@ -363,7 +405,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Could not extract the Amazon ASIN from this link. Please use a valid Amazon product link or amzn.to product link.",
+            "Could not find the Amazon product ASIN. Please use a valid Amazon product link.",
         },
         {
           status: 400,
@@ -373,41 +415,41 @@ export async function POST(req: NextRequest) {
 
     console.log("Amazon ASIN:", asin);
 
-    // Get the ACTUAL image belonging to this ASIN.
-    const productImage = await getAmazonProductImage(
-      resolvedUrl,
-      asin
-    );
+    // Find the CORRECT image for this product.
+    const productImage =
+      await getAmazonProductImage(
+        resolvedUrl,
+        asin
+      );
 
     if (!productImage) {
       console.warn(
-        `No Amazon image could be found for ASIN ${asin}`
+        "No Amazon image found for ASIN:",
+        asin
       );
     }
 
     const productKeywords =
       createProductKeywords(productName);
 
-    const affiliateLink = buildAffiliateLink(
-      resolvedUrl,
-      asin
-    );
+    const affiliateLink =
+      buildAffiliateLink(
+        resolvedUrl,
+        asin
+      );
 
     return NextResponse.json({
       kit: {
         productName:
           productName || "Amazon Product",
 
-        /*
-         * IMPORTANT:
-         * This is now the actual image found for the ASIN.
-         * The old hard-coded image has been completely removed.
-         */
-        productImage: productImage || "",
+        productImage:
+          productImage || "",
 
-        asin,
+        asin: asin,
 
-        affiliateLink,
+        affiliateLink:
+          affiliateLink,
 
         captions:
           createCaptions(productKeywords),
@@ -417,7 +459,10 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("CartCue generation API error:", error);
+    console.error(
+      "CartCue generation API error:",
+      error
+    );
 
     return NextResponse.json(
       {
@@ -429,4 +474,4 @@ export async function POST(req: NextRequest) {
       }
     );
   }
-}
+    }
