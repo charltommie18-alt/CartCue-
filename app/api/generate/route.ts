@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Amazon URL is required" }, { status: 400 });
     }
 
-    // 1. Resolve short links
+    // 1. Resolve short links (amzn.to)
     const resolvedUrl = amazonUrl.includes('amzn.to') ? await resolveShortUrl(amazonUrl) : amazonUrl;
     const asin = extractASIN(resolvedUrl) || "UNKNOWN";
 
@@ -85,4 +85,4 @@ export async function POST(req: NextRequest) {
     console.error("API Error:", error);
     return NextResponse.json({ error: "Generation failed. Please try again." }, { status: 500 });
   }
-        }
+                             }
