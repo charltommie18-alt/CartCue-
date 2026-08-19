@@ -1,3 +1,6 @@
+const TRIAL_DAYS = 7;
+const TRIAL_GENERATIONS = 10;
+
 export type PlanState = {
   plan: "trial" | "free" | "pro";
   trialEndsAt: string | null;
@@ -6,9 +9,6 @@ export type PlanState = {
   autoRenewing: boolean;
   freeTrialEndAt: string | null;
 };
-
-const TRIAL_DAYS = 3;
-const TRIAL_GENERATIONS = 10;
 
 type StoredSubscription = {
   active: boolean;
@@ -21,20 +21,16 @@ type StoredSubscription = {
 };
 
 function getStoredSubscription(): StoredSubscription | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
+  if (typeof window === "undefined") return null;
 
   try {
     const raw = localStorage.getItem(
       "cartcue_amazon_subscription"
     );
 
-    if (!raw) {
-      return null;
-    }
-
-    return JSON.parse(raw) as StoredSubscription;
+    return raw
+      ? (JSON.parse(raw) as StoredSubscription)
+      : null;
   } catch {
     return null;
   }
@@ -43,50 +39,44 @@ function getStoredSubscription(): StoredSubscription | null {
 export function saveAmazonSubscription(
   subscription: StoredSubscription
 ) {
-  if (typeof window === "undefined") {
-    return;
-  }
+  if (typeof window === "undefined") return;
 
   localStorage.setItem(
     "cartcue_amazon_subscription",
     JSON.stringify(subscription)
   );
 
-  /*
-   * Kept for compatibility with the existing app.
-   * It is only a UI cache; the real source of truth is
-   * Amazon receipt verification.
-   */
-  localStorage.setItem("cartcue_pro", "true");
+  localStorage.setItem(
+    "cartcue_pro",
+    "true"
+  );
 }
 
 export function clearAmazonSubscription() {
-  if (typeof window === "undefined") {
-    return;
-  }
+  if (typeof window === "undefined") return;
 
   localStorage.removeItem(
     "cartcue_amazon_subscription"
   );
 
-  localStorage.removeItem("cartcue_pro");
+  localStorage.removeItem(
+    "cartcue_pro"
+  );
 }
 
-function getLocalTrial(): {
-  plan: "trial" | "free";
-  trialEndsAt: string | null;
-  generationsLeft: number | null;
-} {
+function getLocalTrial() {
   if (typeof window === "undefined") {
     return {
-      plan: "trial",
+      plan: "trial" as const,
       trialEndsAt: null,
       generationsLeft: TRIAL_GENERATIONS,
     };
   }
 
   let start =
-    localStorage.getItem("cartcue_trial_start");
+    localStorage.getItem(
+      "cartcue_trial_start"
+    );
 
   if (!start) {
     start = new Date().toISOString();
@@ -97,7 +87,7 @@ function getLocalTrial(): {
     );
   }
 
-  const ends =
+  const end =
     new Date(start).getTime() +
     TRIAL_DAYS *
       24 *
@@ -105,15 +95,7 @@ function getLocalTrial(): {
       60 *
       1000;
 
-  const endsDate = new Date(ends);
-
-  if (Date.now() >= ends) {
-    return {
-      plan: "free",
-      trialEndsAt: endsDate.toISOString(),
-      generationsLeft: 0,
-    };
-  }
+  const endDate = new Date(end);
 
   const used = parseInt(
     localStorage.getItem(
@@ -122,15 +104,23 @@ function getLocalTrial(): {
     10
   );
 
-  const left = Math.max(
-    0,
-    TRIAL_GENERATIONS - used
-  );
+  if (Date.now() >= end) {
+    return {
+      plan: "free" as const,
+      trialEndsAt:
+        endDate.toISOString(),
+      generationsLeft: 0,
+    };
+  }
 
   return {
-    plan: "trial",
-    trialEndsAt: endsDate.toISOString(),
-    generationsLeft: left,
+    plan: "trial" as const,
+    trialEndsAt:
+      endDate.toISOString(),
+    generationsLeft: Math.max(
+      0,
+      TRIAL_GENERATIONS - used
+    ),
   };
 }
 
@@ -149,25 +139,21 @@ export function getPlanState(): PlanState {
   const subscription =
     getStoredSubscription();
 
-  if (subscription) {
+  if (subscription?.active) {
     const now = Date.now();
 
-    const endDate =
+    const end =
       subscription.cancelDate ||
       subscription.renewalDate ||
       subscription.freeTrialEndDate;
 
-    const active =
-      subscription.active &&
-      (!endDate || endDate > now);
-
-    if (active) {
+    if (!end || end > now) {
       return {
         plan: "pro",
         trialEndsAt: null,
         generationsLeft: null,
-        subscriptionEndAt: endDate
-          ? new Date(endDate).toISOString()
+        subscriptionEndAt: end
+          ? new Date(end).toISOString()
           : null,
         autoRenewing:
           subscription.autoRenewing,
@@ -185,7 +171,8 @@ export function getPlanState(): PlanState {
 
   return {
     plan: trial.plan,
-    trialEndsAt: trial.trialEndsAt,
+    trialEndsAt:
+      trial.trialEndsAt,
     generationsLeft:
       trial.generationsLeft,
     subscriptionEndAt: null,
@@ -194,62 +181,28 @@ export function getPlanState(): PlanState {
   };
 }
 
-export function getTrialTimeLeft(): {
-  hours: number;
-  minutes: number;
-  expired: boolean;
-} {
+export function getTrialTimeLeft() {
   const state = getPlanState();
 
-  if (state.plan === "pro") {
-    const end =
-      state.freeTrialEndAt ||
-      state.subscriptionEndAt;
-
-    if (!end) {
-      return {
-        hours: 0,
-        minutes: 0,
-        expired: false,
-      };
-    }
-
-    const diff =
-      new Date(end).getTime() -
-      Date.now();
-
-    if (diff <= 0) {
-      return {
-        hours: 0,
-        minutes: 0,
-        expired: false,
-      };
-    }
-
-    return {
-      hours: Math.floor(
-        diff / 3600000
-      ),
-      minutes: Math.floor(
-        (diff % 3600000) / 60000
-      ),
-      expired: false,
-    };
-  }
-
-  if (!state.trialEndsAt) {
+  if (
+    state.plan !== "trial" ||
+    !state.trialEndsAt
+  ) {
     return {
       hours: 0,
       minutes: 0,
-      expired: true,
+      expired:
+        state.plan === "free",
     };
   }
 
-  const diff =
-    new Date(state.trialEndsAt).getTime() -
+  const difference =
+    new Date(
+      state.trialEndsAt
+    ).getTime() -
     Date.now();
 
-  if (diff <= 0) {
+  if (difference <= 0) {
     return {
       hours: 0,
       minutes: 0,
@@ -259,19 +212,18 @@ export function getTrialTimeLeft(): {
 
   return {
     hours: Math.floor(
-      diff / 3600000
+      difference / 3600000
     ),
     minutes: Math.floor(
-      (diff % 3600000) / 60000
+      (difference % 3600000) /
+        60000
     ),
     expired: false,
   };
 }
 
 export function consumeGeneration() {
-  if (typeof window === "undefined") {
-    return;
-  }
+  if (typeof window === "undefined") return;
 
   const used = parseInt(
     localStorage.getItem(
@@ -287,9 +239,7 @@ export function consumeGeneration() {
 }
 
 export function activatePro() {
-  if (typeof window === "undefined") {
-    return;
-  }
+  if (typeof window === "undefined") return;
 
   localStorage.setItem(
     "cartcue_pro",
@@ -298,9 +248,7 @@ export function activatePro() {
 }
 
 export function resetTrial() {
-  if (typeof window === "undefined") {
-    return;
-  }
+  if (typeof window === "undefined") return;
 
   localStorage.removeItem(
     "cartcue_trial_start"
@@ -317,4 +265,4 @@ export function resetTrial() {
   localStorage.removeItem(
     "cartcue_amazon_subscription"
   );
-}
+      }
