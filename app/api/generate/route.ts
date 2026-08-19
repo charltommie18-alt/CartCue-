@@ -31,37 +31,48 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { productName, amazonUrl } = body;
 
+    console.log("🔍 Received request:", { productName, amazonUrl });
+
     if (!amazonUrl) {
       return NextResponse.json({ error: "Amazon URL is required" }, { status: 400 });
     }
 
-    // 1. Resolve short links (amzn.to)
+    // 1. Resolve short links
     const resolvedUrl = amazonUrl.includes('amzn.to') ? await resolveShortUrl(amazonUrl) : amazonUrl;
-    const asin = extractASIN(resolvedUrl) || "UNKNOWN";
-
-    let finalProductName = productName || "This Amazon Find";
-    let imageUrl = "https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=500&q=80"; // Default fallback
-
-    // 2. 🚀 THE MAGIC FIX: Use Microlink to get the REAL image and title for ANY product
-    try {
-      const microlinkRes = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(resolvedUrl)}`);
-      const microlinkData = await microlinkRes.json();
-      
-      if (microlinkData.status === 'success' && microlinkData.data) {
-        // Get the real image
-        if (microlinkData.data.image?.url) {
-          imageUrl = microlinkData.data.image.url;
-        }
-        // Get the real title if user didn't type one
-        if (!productName && microlinkData.data.title) {
-          finalProductName = microlinkData.data.title;
-        }
-      }
-    } catch (error) {
-      console.error("Microlink failed, using fallback:", error);
+    console.log("✅ Resolved URL:", resolvedUrl);
+    
+    const asin = extractASIN(resolvedUrl);
+    console.log("️ Extracted ASIN:", asin);
+    
+    if (!asin) {
+      return NextResponse.json({ error: "Could not extract ASIN from URL" }, { status: 400 });
     }
 
-    // 3. Generate dynamic captions based on the ACTUAL product name
+    let finalProductName = productName || `Product ${asin}`;
+    
+    // 2. 🎯 CONSTRUCT AMAZON IMAGE URL DIRECTLY FROM ASIN
+    // This is the most reliable method - Amazon's CDN uses this format
+    const imageUrl = `https://m.media-amazon.com/images/I/${asin}._AC_SL1500_.jpg`;
+    
+    console.log("️ Generated Image URL:", imageUrl);
+
+    // 3. Try to fetch the actual product title if not provided
+    try {
+      const pageRes = await fetch(resolvedUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+      });
+      const html = await pageRes.text();
+      
+      // Extract title from og:title meta tag
+      const ogTitleMatch = html.match(/<meta[^>]*property="og:title"[^>]*content="([^"]*)"/i);
+      if (ogTitleMatch && ogTitleMatch[1] && !productName) {
+        finalProductName = ogTitleMatch[1];
+        console.log(" Extracted product name:", finalProductName);
+      }
+    } catch (error) {
+      console.log("⚠️ Could not fetch product title, using default");
+    }
+
     return NextResponse.json({
       kit: {
         productName: finalProductName,
@@ -69,9 +80,9 @@ export async function POST(req: NextRequest) {
         asin: asin,
         affiliateLink: resolvedUrl.includes("tag=") ? resolvedUrl : `${resolvedUrl}?tag=yourtag-20`,
         captions: [
-          `🚨 Amazon Find Alert! Just got my hands on this ${finalProductName} and I'm obsessed. 😍 Perfect for leveling up your daily routine. Link in bio to grab yours! 👇 #AmazonFinds #MustHave`,
+          `🚨 Amazon Find Alert! Just got my hands on this ${finalProductName} and I'm obsessed.  Perfect for leveling up your daily routine. Link in bio! 👇 #AmazonFinds #MustHave`,
           `POV: You finally found the perfect ${finalProductName} that doesn't break the bank. ✨ 10/10 recommend. Tap the link to shop! 🛒 #TikTokMadeMeBuyIt #AmazonDeals`,
-          `Stop scrolling! 🛑 This ${finalProductName} is the ultimate game-changer. I don't know how I lived without it. Get yours before it sells out! #SmartShopping #Amazon`
+          `Stop scrolling!  This ${finalProductName} is the ultimate game-changer. Get yours before it sells out! #SmartShopping #Amazon`
         ],
         hashtags: [
           "#AmazonFinds", "#AmazonMustHaves", "#TikTokMadeMeBuyIt", 
@@ -82,7 +93,7 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error("API Error:", error);
+    console.error("❌ API Error:", error);
     return NextResponse.json({ error: "Generation failed. Please try again." }, { status: 500 });
   }
-                             }
+  }
