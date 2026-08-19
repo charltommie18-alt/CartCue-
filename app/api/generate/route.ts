@@ -5,9 +5,7 @@ async function resolveShortUrl(shortUrl: string): Promise<string> {
     const response = await fetch(shortUrl, {
       method: 'GET',
       redirect: 'follow',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      }
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
     });
     return response.url;
   } catch (error) {
@@ -37,31 +35,47 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Amazon URL is required" }, { status: 400 });
     }
 
+    // 1. Resolve short links
     const resolvedUrl = amazonUrl.includes('amzn.to') ? await resolveShortUrl(amazonUrl) : amazonUrl;
-    const asin = extractASIN(resolvedUrl);
-    
-    if (!asin) {
-      return NextResponse.json({ error: "Invalid Amazon URL. Could not find ASIN." }, { status: 400 });
+    const asin = extractASIN(resolvedUrl) || "UNKNOWN";
+
+    let finalProductName = productName || "This Amazon Find";
+    let imageUrl = "https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=500&q=80"; // Default fallback
+
+    // 2. 🚀 THE MAGIC FIX: Use Microlink to get the REAL image and title for ANY product
+    try {
+      const microlinkRes = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(resolvedUrl)}`);
+      const microlinkData = await microlinkRes.json();
+      
+      if (microlinkData.status === 'success' && microlinkData.data) {
+        // Get the real image
+        if (microlinkData.data.image?.url) {
+          imageUrl = microlinkData.data.image.url;
+        }
+        // Get the real title if user didn't type one
+        if (!productName && microlinkData.data.title) {
+          finalProductName = microlinkData.data.title;
+        }
+      }
+    } catch (error) {
+      console.error("Microlink failed, using fallback:", error);
     }
 
-    // We will use a high-quality generic image for now to ensure the UI works perfectly.
-    // (Amazon blocks direct scraping from serverless functions like Render without a paid proxy).
-    const imageUrl = "https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=500&q=80";
-
+    // 3. Generate dynamic captions based on the ACTUAL product name
     return NextResponse.json({
       kit: {
-        productName: productName || "Amazon Product",
+        productName: finalProductName,
         productImage: imageUrl,
         asin: asin,
         affiliateLink: resolvedUrl.includes("tag=") ? resolvedUrl : `${resolvedUrl}?tag=yourtag-20`,
         captions: [
-          `🚨 Amazon Find Alert! Just got my hands on this and I'm obsessed. 😍 Perfect for leveling up your daily routine. Link in bio to grab yours! 👇 #AmazonFinds #MustHave`,
-          `POV: You finally found the perfect product that doesn't break the bank. ✨ 10/10 recommend. Tap the link to shop! 🛒 #TikTokMadeMeBuyIt #AmazonDeals`,
-          `Stop scrolling! 🛑 This is the ultimate game-changer. I don't know how I lived without it.  Get yours before it sells out! #SmartShopping #Amazon`
+          `🚨 Amazon Find Alert! Just got my hands on this ${finalProductName} and I'm obsessed. 😍 Perfect for leveling up your daily routine. Link in bio to grab yours! 👇 #AmazonFinds #MustHave`,
+          `POV: You finally found the perfect ${finalProductName} that doesn't break the bank. ✨ 10/10 recommend. Tap the link to shop! 🛒 #TikTokMadeMeBuyIt #AmazonDeals`,
+          `Stop scrolling! 🛑 This ${finalProductName} is the ultimate game-changer. I don't know how I lived without it. Get yours before it sells out! #SmartShopping #Amazon`
         ],
         hashtags: [
           "#AmazonFinds", "#AmazonMustHaves", "#TikTokMadeMeBuyIt", 
-          "#TechDeals", "#OnlineShopping", "#DealAlert", "#SmartBuy", 
+          "#OnlineShopping", "#DealAlert", "#SmartBuy", 
           "#ProductReview", `#${asin}`
         ]
       }
@@ -71,4 +85,4 @@ export async function POST(req: NextRequest) {
     console.error("API Error:", error);
     return NextResponse.json({ error: "Generation failed. Please try again." }, { status: 500 });
   }
-}
+        }
