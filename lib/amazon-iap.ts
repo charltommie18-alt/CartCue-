@@ -1,20 +1,12 @@
 "use client";
 
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, registerPlugin } from "@capacitor/core";
 
 export const AMAZON_PARENT_SKU =
   "CartCue_monthly_sub";
 
-/*
- * IMPORTANT:
- * Amazon purchases the MONTHLY TERM SKU,
- * not the parent subscription SKU.
- *
- * Put your real Monthly Term SKU here after
- * you see it in Amazon Developer Console.
- */
 export const AMAZON_SUBSCRIPTION_SKU =
-  "REPLACE_WITH_YOUR_MONTHLY_TERM_SKU";
+  "CartCue_monthly_term";
 
 type PurchaseResult = {
   success: boolean;
@@ -27,19 +19,21 @@ type PurchaseResult = {
   marketplace?: string;
 };
 
+type RestoreReceipt = {
+  sku?: string;
+  termSku?: string;
+  receiptId?: string;
+  purchaseDate?: number;
+  canceled?: boolean;
+};
+
 type RestoreResult = {
-  receipts: Array<{
-    sku?: string;
-    termSku?: string;
-    receiptId?: string;
-    purchaseDate?: number;
-    canceled?: boolean;
-  }>;
+  receipts: RestoreReceipt[];
   userId?: string;
   marketplace?: string;
 };
 
-type AmazonIAPApi = {
+interface AmazonIAPPlugin {
   purchase(options: {
     sku: string;
   }): Promise<PurchaseResult>;
@@ -60,146 +54,140 @@ type AmazonIAPApi = {
   }): Promise<{
     success: boolean;
   }>;
-};
+}
 
-let plugin:
-  | AmazonIAPApi
-  | null = null;
+/*
+ * IMPORTANT:
+ *
+ * This is a Capacitor native plugin.
+ * Do NOT import AmazonIAP.java or
+ * AmazonIAPPlugin.java from here.
+ *
+ * The Android native project registers the
+ * plugin using the name "AmazonIAP".
+ */
+const AmazonIAPNative =
+  registerPlugin<AmazonIAPPlugin>(
+    "AmazonIAP"
+  );
 
-async function getPlugin() {
-  if (plugin) {
-    return plugin;
-  }
-
+function ensureAndroid() {
   if (
     Capacitor.getPlatform() !==
     "android"
   ) {
     throw new Error(
-      "Amazon Appstore payments are only available in the Android Amazon Appstore build."
+      "Amazon Appstore payments are only available in the Android Amazon Appstore version of CartCue."
     );
-  }
-
-  try {
-    const module =
-      await import(
-        "../amazon-iap/AmazonIAP"
-      );
-
-    plugin =
-      module.AmazonIAP as AmazonIAPApi;
-
-    return plugin;
-  } catch {
-    /*
-     * Capacitor native plugins are normally
-     * registered by the Android project.
-     *
-     * Try the global Capacitor plugin
-     * registration if the direct import is
-     * not available.
-     */
-    const CapacitorModule =
-      await import(
-        "@capacitor/core"
-      );
-
-    const registered =
-      CapacitorModule.registerPlugin<AmazonIAPApi>(
-        "AmazonIAP"
-      );
-
-    plugin = registered;
-
-    return plugin;
   }
 }
 
+/**
+ * Get the Amazon Appstore user.
+ */
 export async function getAmazonUserData() {
-  const api =
-    await getPlugin();
+  ensureAndroid();
 
-  return api.getUserData();
+  return AmazonIAPNative.getUserData();
 }
 
-export async function purchase({
-  sku = AMAZON_SUBSCRIPTION_SKU,
-}: {
-  sku?: string;
-} = {}) {
-  if (
-    !sku ||
-    sku ===
-      "REPLACE_WITH_YOUR_MONTHLY_TERM_SKU"
-  ) {
-    throw new Error(
-      "Your Amazon Monthly Term SKU has not been entered yet."
-    );
-  }
+/**
+ * Start the CartCue monthly subscription.
+ *
+ * Amazon Term SKU:
+ * CartCue_monthly_term
+ *
+ * This subscription has the 7-day free trial
+ * configured in Amazon Developer Console.
+ */
+export async function purchase() {
+  ensureAndroid();
 
-  const api =
-    await getPlugin();
-
-  /*
-   * Get Amazon user information BEFORE
-   * purchasing so the receipt can later be
-   * verified securely on the server.
-   */
-  let userData;
-
-  try {
-    userData =
-      await api.getUserData();
-  } catch {
-    userData = undefined;
-  }
+  const userData =
+    await AmazonIAPNative.getUserData();
 
   const result =
-    await api.purchase({
-      sku,
+    await AmazonIAPNative.purchase({
+      sku: AMAZON_SUBSCRIPTION_SKU,
     });
 
   if (!result?.success) {
     throw new Error(
-      "Amazon did not complete the purchase."
+      "Amazon did not complete the subscription purchase."
     );
   }
 
   return {
     ...result,
 
+    sku:
+      result.sku ||
+      AMAZON_SUBSCRIPTION_SKU,
+
     userId:
       result.userId ||
-      userData?.userId,
+      userData.userId,
 
     marketplace:
       result.marketplace ||
-      userData?.marketplace,
+      userData.marketplace,
   };
 }
 
+/**
+ * Restore existing Amazon purchases.
+ *
+ * This is important when the customer:
+ * - reinstalls CartCue
+ * - changes device
+ * - signs in again
+ * - already has an active subscription
+ */
 export async function restorePurchases() {
-  const api =
-    await getPlugin();
+  ensureAndroid();
 
-  const result =
-    await api.restorePurchases();
-
-  return result;
+  return AmazonIAPNative.restorePurchases();
 }
 
+/**
+ * Synchronize Amazon purchase history.
+ */
 export async function syncPurchases() {
-  const api =
-    await getPlugin();
+  ensureAndroid();
 
-  const result =
-    await api.syncPurchases();
-
-  return result;
+  return AmazonIAPNative.syncPurchases();
 }
 
+/**
+ * Tell Amazon that the receipt was successfully
+ * processed after server verification.
+ */
 export async function fulfillPurchase(
   receiptId: string
+) {
+  ensureAndroid();
+
+  if (!receiptId) {
+    throw new Error(
+      "Missing Amazon receipt ID."
+    );
+  }
+
+  return AmazonIAPNative.fulfillPurchase({
+    receiptId,
+    result: "FULFILLED",
+  });
+}
+
+/**
+ * Verify an Amazon receipt through our server.
+ *
+ * The Amazon secret NEVER goes into this file.
+ */
+export async function verifyAmazonReceipt(
+  receiptId: string,
+  userId: string,
+  sku: string = AMAZON_SUBSCRIPTION_SKU
 ) {
   if (!receiptId) {
     throw new Error(
@@ -207,21 +195,112 @@ export async function fulfillPurchase(
     );
   }
 
-  const api =
-    await getPlugin();
+  if (!userId) {
+    throw new Error(
+      "Missing Amazon user ID."
+    );
+  }
 
-  return api.fulfillPurchase({
-    receiptId,
-    result: "FULFILLED",
-  });
+  const response =
+    await fetch(
+      "/api/amazon/verify",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+
+        body: JSON.stringify({
+          receiptId,
+          userId,
+          sku,
+        }),
+      }
+    );
+
+  const data =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+        "Amazon receipt verification failed."
+    );
+  }
+
+  return data;
+}
+
+/**
+ * Complete purchase flow:
+ *
+ * 1. Amazon purchase
+ * 2. Get receipt
+ * 3. Verify receipt on server
+ * 4. Fulfill receipt
+ *
+ * The subscription is NOT considered active
+ * until Amazon verification succeeds.
+ */
+export async function subscribeToCartCue() {
+  ensureAndroid();
+
+  const purchaseResult =
+    await purchase();
+
+  if (
+    !purchaseResult.receiptId
+  ) {
+    throw new Error(
+      "Amazon did not return a receipt ID."
+    );
+  }
+
+  if (
+    !purchaseResult.userId
+  ) {
+    throw new Error(
+      "Amazon did not return a user ID."
+    );
+  }
+
+  const verification =
+    await verifyAmazonReceipt(
+      purchaseResult.receiptId,
+      purchaseResult.userId,
+      AMAZON_SUBSCRIPTION_SKU
+    );
+
+  if (!verification?.active) {
+    throw new Error(
+      "Amazon verification did not confirm an active subscription."
+    );
+  }
+
+  await fulfillPurchase(
+    purchaseResult.receiptId
+  );
+
+  return {
+    ...purchaseResult,
+
+    verification,
+
+    active: true,
+  };
 }
 
 const AmazonIAP = {
   purchase,
+  subscribeToCartCue,
   restorePurchases,
   syncPurchases,
-  getUserData: getAmazonUserData,
+  getUserData:
+    getAmazonUserData,
   fulfillPurchase,
+  verifyAmazonReceipt,
 };
 
 export default AmazonIAP;
