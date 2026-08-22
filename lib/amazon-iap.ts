@@ -72,29 +72,37 @@ function ensureAndroid() {
   }
 }
 
-/**
- * Get Amazon user information.
- */
-export async function getAmazonUserData() {
-  ensureAndroid();
-
-  return AmazonIAPNative.getUserData();
-}
-
-/**
- * Start an Amazon subscription purchase.
+/*
+ * Supports BOTH existing CartCue formats:
  *
- * Accepts an optional SKU so existing CartCue
- * code such as:
+ * purchase("CartCue_monthly_term")
  *
- * purchase(AMAZON_SUBSCRIPTION_SKU)
+ * and
  *
- * continues to work.
+ * purchase({
+ *   sku: "CartCue_monthly_term"
+ * })
  */
 export async function purchase(
-  sku: string = AMAZON_SUBSCRIPTION_SKU
+  input?:
+    | string
+    | {
+        sku: string;
+      }
 ) {
   ensureAndroid();
+
+  let sku =
+    AMAZON_SUBSCRIPTION_SKU;
+
+  if (typeof input === "string") {
+    sku = input;
+  } else if (
+    input &&
+    typeof input.sku === "string"
+  ) {
+    sku = input.sku;
+  }
 
   if (!sku) {
     throw new Error(
@@ -132,27 +140,24 @@ export async function purchase(
   };
 }
 
-/**
- * Restore previous Amazon purchases.
- */
+export async function getAmazonUserData() {
+  ensureAndroid();
+
+  return AmazonIAPNative.getUserData();
+}
+
 export async function restorePurchases() {
   ensureAndroid();
 
   return AmazonIAPNative.restorePurchases();
 }
 
-/**
- * Synchronize Amazon purchases.
- */
 export async function syncPurchases() {
   ensureAndroid();
 
   return AmazonIAPNative.syncPurchases();
 }
 
-/**
- * Fulfill an Amazon receipt after verification.
- */
 export async function fulfillPurchase(
   receiptId: string
 ) {
@@ -170,10 +175,6 @@ export async function fulfillPurchase(
   });
 }
 
-/**
- * Verify an Amazon receipt on the CartCue
- * server.
- */
 export async function verifyAmazonReceipt(
   receiptId: string,
   userId: string,
@@ -223,16 +224,14 @@ export async function verifyAmazonReceipt(
   return data;
 }
 
-/**
- * Complete CartCue subscription flow.
- */
 export async function subscribeToCartCue() {
   ensureAndroid();
 
   const purchaseResult =
-    await purchase(
-      AMAZON_SUBSCRIPTION_SKU
-    );
+    await purchase({
+      sku:
+        AMAZON_SUBSCRIPTION_SKU,
+    });
 
   if (
     !purchaseResult.receiptId
