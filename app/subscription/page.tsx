@@ -45,8 +45,7 @@ export default function SubscriptionPage() {
         );
       }
 
-      const receiptId = result?.receiptId;
-      activateAmazonSub(activeReceipt.receiptId ?? null);
+      activateAmazonSub(result?.receiptId ?? null);
 
       const newState = getPlanState();
       setState(newState);
@@ -107,7 +106,7 @@ export default function SubscriptionPage() {
         return;
       }
 
-      activateAmazonSub(activeReceipt.receiptId);
+      activateAmazonSub(activeReceipt.receiptId ?? null);
 
       setState(getPlanState());
 
@@ -316,4 +315,4 @@ export default function SubscriptionPage() {
       </main>
     </div>
   );
-        }
+  }
