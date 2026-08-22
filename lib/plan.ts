@@ -1,3 +1,5 @@
+export const AMAZON_SUB_SKU = "CartCue_monthly_term";
+
 const TRIAL_DAYS = 7;
 const TRIAL_GENERATIONS = 10;
 
@@ -265,4 +267,20 @@ export function resetTrial() {
   localStorage.removeItem(
     "cartcue_amazon_subscription"
   );
-      }
+}
+
+export function activateAmazonSub(receiptId?: string) {
+  if (typeof window === "undefined") return;
+
+  const now = Date.now();
+
+  saveAmazonSubscription({
+    active: true,
+    autoRenewing: true,
+    renewalDate: now + 30 * 24 * 60 * 60 * 1000, // 30 days from now
+    cancelDate: null,
+    freeTrialEndDate: now + 7 * 24 * 60 * 60 * 1000, // 7-day free trial
+    receiptId: receiptId || null,
+    verifiedAt: now,
+  });
+    }
