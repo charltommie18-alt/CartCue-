@@ -269,7 +269,9 @@ export function resetTrial() {
   );
 }
 
-export function activateAmazonSub(receiptId?: string) {
+export function activateAmazonSub(
+  receiptId?: string | null
+) {
   if (typeof window === "undefined") return;
 
   const now = Date.now();
@@ -277,10 +279,10 @@ export function activateAmazonSub(receiptId?: string) {
   saveAmazonSubscription({
     active: true,
     autoRenewing: true,
-    renewalDate: now + 30 * 24 * 60 * 60 * 1000, // 30 days from now
+    renewalDate: now + 30 * 24 * 60 * 60 * 1000,
     cancelDate: null,
-    freeTrialEndDate: now + 7 * 24 * 60 * 60 * 1000, // 7-day free trial
+    freeTrialEndDate: now + 7 * 24 * 60 * 60 * 1000,
     receiptId: receiptId || null,
     verifiedAt: now,
   });
-    }
+      }
