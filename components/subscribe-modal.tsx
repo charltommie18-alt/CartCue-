@@ -81,7 +81,7 @@ export default function SubscribeModal({
           verification.freeTrialEndDate ||
           null,
         receiptId:
-          result.receiptId,
+          result.receiptId ?? null,
         verifiedAt: Date.now(),
       });
 
@@ -150,4 +150,4 @@ export default function SubscribeModal({
       </div>
     </div>
   );
-}
+          }
