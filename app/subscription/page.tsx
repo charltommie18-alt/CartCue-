@@ -46,7 +46,7 @@ export default function SubscriptionPage() {
       }
 
       const receiptId = result?.receiptId;
-      activateAmazonSub(receiptId);
+      activateAmazonSub(activeReceipt.receiptId ?? null);
 
       const newState = getPlanState();
       setState(newState);
