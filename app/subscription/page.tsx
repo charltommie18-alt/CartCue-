@@ -46,7 +46,8 @@ export default function SubscriptionPage() {
         );
       }
 
-      activateAmazonSub();
+      // Pass the receiptId to save it in local storage
+      activateAmazonSub(result?.receiptId);
 
       const newState = getPlanState();
       setState(newState);
@@ -89,27 +90,27 @@ export default function SubscriptionPage() {
     setBusy(true);
 
     try {
-      const result =
-        await AmazonIAP.restorePurchases();
+      const result = await AmazonIAP.restorePurchases();
 
-      const receipts =
-        Array.isArray(result?.receipts)
-          ? result.receipts
-          : [];
+      const receipts = Array.isArray(result?.receipts)
+        ? result.receipts
+        : [];
 
-      const active = receipts.some(
+      // Find the specific active receipt for our SKU
+      const activeReceipt = receipts.find(
         (receipt) =>
-          receipt?.sku === AMAZON_SUB_SKU
+          receipt?.sku === AMAZON_SUB_SKU && !receipt?.canceled
       );
 
-      if (!active) {
+      if (!activeReceipt) {
         setNotice(
           "No active CartCue Amazon subscription was found."
         );
         return;
       }
 
-      activateAmazonSub();
+      // Pass the restored receiptId to save it in local storage
+      activateAmazonSub(activeReceipt.receiptId);
 
       setState(getPlanState());
 
@@ -163,22 +164,18 @@ export default function SubscriptionPage() {
                 {state.plan}
               </span>
 
-              {state.plan === "trial" &&
-                state.trialEndsAt && (
-                  <>
-                    {" "}
-                    · Trial ends{" "}
-                    {new Date(
-                      state.trialEndsAt
-                    ).toLocaleDateString()}
-                  </>
-                )}
+              {state.plan === "trial" && state.trialEndsAt && (
+                <>
+                  {" "}
+                  · Trial ends{" "}
+                  {new Date(state.trialEndsAt).toLocaleDateString()}
+                </>
+              )}
 
               {state.generationsLeft !== null && (
                 <>
                   {" "}
-                  · {state.generationsLeft} generations
-                  remaining
+                  · {state.generationsLeft} generations remaining
                 </>
               )}
 
@@ -310,15 +307,13 @@ export default function SubscriptionPage() {
           </p>
 
           <p className="mt-1">
-            After the 7-day trial, your Amazon
-            subscription continues at $4.99/month if
-            you subscribed through Amazon.
+            After the 7-day trial, your Amazon subscription continues at
+            $4.99/month if you subscribed through Amazon.
           </p>
 
           <p className="mt-1">
-            You can manage or cancel your subscription
-            through your Amazon Appstore subscription
-            management.
+            You can manage or cancel your subscription through your Amazon
+            Appstore subscription management.
           </p>
         </div>
       </main>
