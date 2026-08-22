@@ -47,7 +47,7 @@ export default function SubscriptionPage() {
       }
 
       // Pass the receiptId to save it in local storage
-      activateAmazonSub(result?.receiptId);
+      activateAmazonSub(result?.receiptId ?? null);
 
       const newState = getPlanState();
       setState(newState);
