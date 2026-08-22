@@ -110,7 +110,7 @@ export default function SubscriptionPage() {
       }
 
       // Pass the restored receiptId to save it in local storage
-      activateAmazonSub(activeReceipt.receiptId);
+      activateAmazonSub(activeReceipt.receiptId ?? null);
 
       setState(getPlanState());
 
@@ -319,4 +319,4 @@ export default function SubscriptionPage() {
       </main>
     </div>
   );
-    }
+        }
