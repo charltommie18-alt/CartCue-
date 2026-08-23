@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { getTrialTimeLeft, getPlanState } from '@/lib/plan';
 
 export default function TrialBanner() {
-  const [time, setTime] = useState({ hours: 72, minutes: 0, expired: false });
+  const [time, setTime] = useState({ hours: 168, minutes: 0, expired: false });
   const [plan, setPlan] = useState('trial');
 
   useEffect(() => {
@@ -29,7 +29,7 @@ export default function TrialBanner() {
 
   return (
     <div className="bg-amber-100 border-b border-amber-200 text-center py-2.5 text-sm font-medium">
-      🎁 3-Day Free Trial Active - {time.hours}h {time.minutes}m left - <a href="/subscription" className="underline text-orange-600">Go Pro</a>
+      🎁 7-Day Free Trial Active - {time.hours}h {time.minutes}m left - <a href="/subscription" className="underline text-orange-600">Go Pro</a>
     </div>
   );
 }
