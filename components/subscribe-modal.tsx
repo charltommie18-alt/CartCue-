@@ -72,15 +72,16 @@ export default function SubscribeModal({
           verification.autoRenewing !==
           false,
         renewalDate:
-          verification.renewalDate ||
+          verification.renewalDate ??
           null,
         cancelDate:
-          verification.cancelDate ||
+          verification.cancelDate ??
           null,
         freeTrialEndDate:
-          verification.freeTrialEndDate ||
+          verification.freeTrialEndDate ??
           null,
-        receiptId: result?.receiptId ?? null,
+        receiptId:
+          result.receiptId ?? null,
         verifiedAt: Date.now(),
       });
 
@@ -149,4 +150,4 @@ export default function SubscribeModal({
       </div>
     </div>
   );
-          }
+  }
