@@ -1,33 +1,40 @@
 'use client';
-import { useState } from 'react';
 
-declare global {
-  interface Window {
-    AmazonIAP?: any;
-  }
-}
+import { useState } from 'react';
+import AmazonIAP from '@/lib/amazon-iap';
 
 export default function SubscribeButton() {
   const [loading, setLoading] = useState(false);
 
   const handleSubscribe = async () => {
     setLoading(true);
+
     try {
-      // Check if running inside Amazon Appstore
-      if (typeof window !== 'undefined' && window.AmazonIAP) {
-        // REAL Amazon IAP purchase
-        const result = await window.AmazonIAP.purchase('cartcue_pro_monthly');
-        if (result?.success) {
-          alert('Subscribed! Welcome to CartCue Pro 🎉');
-          localStorage.setItem('cartcue_pro', 'true');
-        }
-      } else {
-        // For web testing / Render - link to Amazon Appstore page
-        alert('To subscribe: Download CartCue from Amazon Appstore, then tap Subscribe. You earn $4.99/month from each user.');
-        window.open('https://www.amazon.com/gp/mas/dl/android?p=com.cartcue.app', '_blank');
+      const result =
+        await AmazonIAP.subscribeToCartCue();
+
+      if (!result?.active) {
+        throw new Error(
+          'Amazon did not confirm an active subscription.'
+        );
       }
+
+      alert(
+        'Subscribed! Welcome to CartCue Pro 🎉'
+      );
+
+      window.location.href = '/';
     } catch (e: any) {
-      alert('Subscribe via Amazon Appstore app: ' + e.message);
+      const message =
+        e?.message ||
+        'Unable to start the Amazon subscription.';
+
+      if (!/cancel/i.test(message)) {
+        alert(
+          'Subscribe via the Amazon Appstore: ' +
+            message
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -37,10 +44,15 @@ export default function SubscribeButton() {
     <button
       onClick={handleSubscribe}
       disabled={loading}
-      className="w-full mt-4 rounded-xl bg-black text-white font-bold py-4 px-6 text-center"
-      style={{background: 'linear-gradient(90deg, #FF9900, #FF6600)'}}
+      className="w-full mt-4 rounded-xl bg-black text-white font-bold py-4 px-6 text-center disabled:opacity-60"
+      style={{
+        background:
+          'linear-gradient(90deg, #FF9900, #FF6600)',
+      }}
     >
-      {loading ? 'Connecting to Amazon...' : '🔓 Unlock Pro - $4.99/month via Amazon'}
+      {loading
+        ? 'Connecting to Amazon...'
+        : '🔓 Start 7-Day Free Trial — $4.99/month'}
     </button>
   );
 }
