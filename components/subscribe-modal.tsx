@@ -2,9 +2,7 @@
 
 import { useState } from "react";
 
-import AmazonIAP, {
-  AMAZON_SUBSCRIPTION_SKU,
-} from "@/lib/amazon-iap";
+import AmazonIAP from "@/lib/amazon-iap";
 
 import {
   saveAmazonSubscription,
@@ -27,61 +25,30 @@ export default function SubscribeModal({
 
     try {
       const result =
-        await AmazonIAP.purchase({
-          sku:
-            AMAZON_SUBSCRIPTION_SKU,
-        });
+        await AmazonIAP.subscribeToCartCue();
 
-      if (!result?.success) {
+      if (!result?.active) {
         throw new Error(
-          "Amazon did not complete the purchase."
-        );
-      }
-
-      const response = await fetch(
-        "/api/amazon/verify",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            receiptId:
-              result.receiptId,
-            sku:
-              result.sku,
-          }),
-        }
-      );
-
-      const verification =
-        await response.json();
-
-      if (!response.ok ||
-          !verification.active) {
-        throw new Error(
-          verification.error ||
-            "Amazon could not verify the subscription."
+          "Amazon did not confirm an active subscription."
         );
       }
 
       saveAmazonSubscription({
         active: true,
         autoRenewing:
-          verification.autoRenewing !==
-          false,
+          result.verification?.autoRenewing !== false,
         renewalDate:
-          verification.renewalDate ||
+          result.verification?.renewalDate ||
           null,
         cancelDate:
-          verification.cancelDate ||
+          result.verification?.cancelDate ||
           null,
         freeTrialEndDate:
-          verification.freeTrialEndDate ||
+          result.verification?.freeTrialEndDate ||
           null,
         receiptId:
-          result.receiptId || null,
+          result.receiptId ||
+          null,
         verifiedAt: Date.now(),
       });
 
@@ -150,4 +117,4 @@ export default function SubscribeModal({
       </div>
     </div>
   );
-}
+          }
