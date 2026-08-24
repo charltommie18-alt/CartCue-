@@ -28,25 +28,16 @@ public class MainActivity
     public void onResume() {
         super.onResume();
 
-        /*
-         * Amazon recommends requesting user data,
-         * validating the subscription SKUs, and
-         * synchronizing purchase updates when the
-         * app resumes.
-         */
         try {
             PurchasingService.getUserData();
 
             Set<String> productSkus =
                     new HashSet<>();
 
-            // Parent subscription SKU.
             productSkus.add(
                     "CartCue_monthly_sub"
             );
 
-            // Monthly child/term SKU that is
-            // actually purchased.
             productSkus.add(
                     "CartCue_monthly_term"
             );
