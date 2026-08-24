@@ -72,17 +72,6 @@ function ensureAndroid() {
   }
 }
 
-/*
- * Supports:
- *
- * purchase("CartCue_monthly_term")
- *
- * and:
- *
- * purchase({
- *   sku: "CartCue_monthly_term"
- * })
- */
 export async function purchase(
   input?:
     | string
@@ -110,11 +99,6 @@ export async function purchase(
     );
   }
 
-  /*
-   * Start Amazon purchase directly.
-   * Do not block the purchase button waiting
-   * for getUserData() first.
-   */
   const result =
     await AmazonIAPNative.purchase({
       sku,
@@ -127,13 +111,9 @@ export async function purchase(
   }
 
   let userId = result.userId;
-  let marketplace = result.marketplace;
+  let marketplace =
+    result.marketplace;
 
-  /*
-   * Normally Amazon returns user data with the
-   * purchase response. If it does not, retrieve
-   * it after the purchase for verification.
-   */
   if (!userId) {
     const userData =
       await AmazonIAPNative.getUserData();
@@ -147,12 +127,9 @@ export async function purchase(
 
   return {
     ...result,
-
     sku:
       result.sku || sku,
-
     userId,
-
     marketplace,
   };
 }
@@ -195,7 +172,8 @@ export async function fulfillPurchase(
 export async function verifyAmazonReceipt(
   receiptId: string,
   userId: string,
-  sku: string = AMAZON_SUBSCRIPTION_SKU
+  sku: string =
+    AMAZON_SUBSCRIPTION_SKU
 ) {
   if (!receiptId) {
     throw new Error(
@@ -214,12 +192,10 @@ export async function verifyAmazonReceipt(
       "/api/amazon/verify",
       {
         method: "POST",
-
         headers: {
           "Content-Type":
             "application/json",
         },
-
         body: JSON.stringify({
           receiptId,
           userId,
@@ -279,10 +255,6 @@ export async function subscribeToCartCue() {
     );
   }
 
-  /*
-   * Tell Amazon the receipt was handled after
-   * successful server-side verification.
-   */
   await fulfillPurchase(
     purchaseResult.receiptId
   );
