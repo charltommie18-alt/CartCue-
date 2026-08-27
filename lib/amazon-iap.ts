@@ -8,16 +8,6 @@ import {
 export const AMAZON_PARENT_SKU =
   "CartCue_monthly_sub";
 
-/*
- * IMPORTANT:
- *
- * This MUST exactly match the TERM SKU
- * you created under the CartCue_monthly_sub
- * subscription in Amazon Developer Console.
- *
- * If your Amazon term SKU is different,
- * change ONLY this value.
- */
 export const AMAZON_SUBSCRIPTION_SKU =
   "CartCue_monthly_term";
 
@@ -63,9 +53,7 @@ interface AmazonIAPPlugin {
 
   fulfillPurchase(options: {
     receiptId: string;
-    result:
-      | "FULFILLED"
-      | "UNAVAILABLE";
+    result?: "FULFILLED" | "UNAVAILABLE";
   }): Promise<{
     success: boolean;
   }>;
@@ -116,23 +104,12 @@ export async function purchase(
     );
   }
 
-  console.log(
-    "Starting Amazon purchase:",
-    sku
-  );
-
   const result =
     await AmazonIAPNative.purchase({
       sku,
     });
 
-  if (!result) {
-    throw new Error(
-      "Amazon returned no purchase response."
-    );
-  }
-
-  if (!result.success) {
+  if (!result?.success) {
     throw new Error(
       "Amazon did not complete the subscription purchase."
     );
@@ -156,20 +133,11 @@ export async function purchase(
       userData.marketplace;
   }
 
-  if (!userId) {
-    throw new Error(
-      "Amazon did not return a user ID."
-    );
-  }
-
   return {
     ...result,
 
-    success: true,
-
     sku:
-      result.sku ||
-      sku,
+      result.sku || sku,
 
     userId,
 
@@ -206,18 +174,14 @@ export async function fulfillPurchase(
     );
   }
 
-  return AmazonIAPNative.fulfillPurchase({
-    receiptId,
-    result: "FULFILLED",
-  });
+  return AmazonIAPNative.fulfillPurchase(
+    {
+      receiptId,
+      result: "FULFILLED",
+    }
+  );
 }
 
-/*
- * Send the Amazon receipt to YOUR SERVER.
- *
- * The Amazon shared secret is NEVER placed
- * in this file.
- */
 export async function verifyAmazonReceipt(
   receiptId: string,
   userId: string,
@@ -247,6 +211,8 @@ export async function verifyAmazonReceipt(
             "application/json",
         },
 
+        cache: "no-store",
+
         body: JSON.stringify({
           receiptId,
           userId,
@@ -255,16 +221,8 @@ export async function verifyAmazonReceipt(
       }
     );
 
-  let data: any;
-
-  try {
-    data =
-      await response.json();
-  } catch {
-    throw new Error(
-      "Amazon verification server returned an invalid response."
-    );
-  }
+  const data =
+    await response.json();
 
   if (!response.ok) {
     throw new Error(
@@ -276,17 +234,6 @@ export async function verifyAmazonReceipt(
   return data;
 }
 
-/*
- * Complete Amazon subscription flow:
- *
- * 1. Start Amazon purchase
- * 2. Receive receipt
- * 3. Receive Amazon user ID
- * 4. Send both to our server
- * 5. Server calls Amazon RVS
- * 6. Only if RVS says active do we unlock Pro
- * 7. Fulfill the receipt
- */
 export async function subscribeToCartCue() {
   ensureAndroid();
 
@@ -312,10 +259,6 @@ export async function subscribeToCartCue() {
     );
   }
 
-  console.log(
-    "Amazon receipt received."
-  );
-
   const verification =
     await verifyAmazonReceipt(
       purchaseResult.receiptId,
@@ -324,47 +267,33 @@ export async function subscribeToCartCue() {
     );
 
   if (
-    !verification ||
-    !verification.active
+    !verification?.active
   ) {
     throw new Error(
-      "Amazon RVS did not confirm an active subscription."
+      verification?.error ||
+        "Amazon verification did not confirm an active subscription."
     );
   }
 
-  /*
-   * IMPORTANT:
-   *
-   * Verify first.
-   * Fulfill second.
-   */
   await fulfillPurchase(
     purchaseResult.receiptId
   );
 
   return {
     ...purchaseResult,
-
     verification,
-
     active: true,
   };
 }
 
 const AmazonIAP = {
   purchase,
-
   subscribeToCartCue,
-
   restorePurchases,
-
   syncPurchases,
-
   getUserData:
     getAmazonUserData,
-
   fulfillPurchase,
-
   verifyAmazonReceipt,
 };
 
