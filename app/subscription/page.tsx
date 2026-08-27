@@ -2,182 +2,187 @@
 
 import { useEffect, useState } from "react";
 import { Capacitor } from "@capacitor/core";
-
 import AmazonIAP from "@/lib/amazon-iap";
 
 import {
+  AMAZON_PARENT_SKU,
   AMAZON_SUB_SKU,
-  saveAmazonSubscription,
+  activateAmazonSub,
   getPlanState,
 } from "@/lib/plan";
 
-import type { PlanState } from "@/lib/plan";
+import type {
+  PlanState,
+} from "@/lib/plan";
 
 export default function SubscriptionPage() {
   const [state, setState] =
     useState<PlanState | null>(null);
 
   const [notice, setNotice] =
-    useState<string>("");
+    useState<string | null>(null);
 
-  const [loading, setLoading] =
+  const [busy, setBusy] =
     useState(false);
 
   useEffect(() => {
-    try {
-      setState(getPlanState());
-    } catch (error) {
-      console.error(
-        "Unable to load subscription state:",
-        error
-      );
-    }
+    setState(
+      getPlanState()
+    );
   }, []);
 
-  async function startSubscription() {
-    setNotice("");
+  async function handleAmazonPurchase() {
+    setNotice(null);
 
     if (
-      Capacitor.getPlatform() !==
-      "android"
+      !Capacitor.isNativePlatform()
     ) {
       setNotice(
-        "Amazon subscriptions are available in the Android Amazon Appstore version of CartCue."
+        "Amazon subscriptions are purchased inside the Android Amazon Appstore version of CartCue."
       );
       return;
     }
 
-    setLoading(true);
+    setBusy(true);
 
     try {
       /*
-       * Start the Amazon subscription.
+       * IMPORTANT:
+       * Amazon purchase() uses the CHILD/TERM SKU.
        *
-       * This function does NOT unlock Pro
-       * until Amazon RVS confirms the receipt.
+       * Amazon returns the PARENT SKU in the
+       * PurchaseResponse.sku for subscriptions.
+       *
+       * Therefore we must NOT reject the purchase
+       * just because result.sku is CartCue_monthly_sub.
        */
       const result =
-        await AmazonIAP.subscribeToCartCue();
+        await AmazonIAP.purchase({
+          sku:
+            AMAZON_SUB_SKU,
+        });
 
-      if (
-        !result ||
-        !result.active
-      ) {
+      if (!result?.receiptId) {
         throw new Error(
-          "Amazon did not confirm an active subscription."
+          "Amazon did not return a purchase receipt."
+        );
+      }
+
+      if (!result?.userId) {
+        throw new Error(
+          "Amazon did not return the customer ID needed to verify the purchase."
+        );
+      }
+
+      const returnedParentSku =
+        result.sku || "";
+
+      const returnedTermSku =
+        result.termSku || "";
+
+      const validSku =
+        returnedParentSku ===
+          AMAZON_PARENT_SKU ||
+        returnedParentSku ===
+          AMAZON_SUB_SKU ||
+        returnedTermSku ===
+          AMAZON_SUB_SKU ||
+        returnedTermSku ===
+          AMAZON_PARENT_SKU;
+
+      if (!validSku) {
+        throw new Error(
+          `Unexpected Amazon SKU. Parent: ${returnedParentSku || "none"}, Term: ${returnedTermSku || "none"}`
         );
       }
 
       /*
-       * Amazon RVS has now confirmed
-       * the subscription.
+       * NEVER activate Pro merely because Amazon's
+       * purchase callback succeeded.
        *
-       * Only now save Pro locally.
+       * Send the receipt to the server and let Amazon
+       * RVS confirm the subscription.
        */
-      saveAmazonSubscription({
-        active: true,
+      const verification =
+        await AmazonIAP.verifyAmazonReceipt(
+          result.receiptId,
+          result.userId,
+          AMAZON_SUB_SKU
+        );
 
-        autoRenewing:
-          result.verification
-            ?.autoRenewing !== false,
+      if (!verification?.active) {
+        throw new Error(
+          verification?.error ||
+            "Amazon did not verify an active subscription."
+        );
+      }
 
-        renewalDate:
-          result.verification
-            ?.renewalDate ?? null,
+      /*
+       * Tell Amazon the purchase was successfully
+       * processed only after server verification.
+       */
+      await AmazonIAP.fulfillPurchase(
+        result.receiptId
+      );
 
-        cancelDate:
-          result.verification
-            ?.cancelDate ?? null,
+      activateAmazonSub(
+        result.receiptId,
+        verification
+      );
 
-        freeTrialEndDate:
-          result.verification
-            ?.freeTrialEndDate ?? null,
-
-        receiptId:
-          result.receiptId ?? null,
-
-        verifiedAt:
-          Date.now(),
-      });
+      const newState =
+        getPlanState();
 
       setState(
-        getPlanState()
+        newState
       );
 
       setNotice(
-        "Amazon verified your subscription. CartCue Pro is now active."
+        "Payment successful. Your CartCue Pro subscription is active."
       );
     } catch (error) {
-      console.error(
-        "Amazon subscription error:",
-        error
-      );
-
       const message =
         error instanceof Error
           ? error.message
           : String(error);
 
-      /*
-       * Amazon can return an existing-purchase
-       * response when the tester already owns
-       * the subscription.
-       *
-       * Try restore automatically.
-       */
       if (
-        /already.?purchased/i.test(
-          message
-        ) ||
-        /existing.?purchase/i.test(
+        message
+          .toUpperCase()
+          .includes(
+            "ALREADY_PURCHASED"
+          )
+      ) {
+        await restoreAmazonPurchase();
+      } else if (
+        !/cancel/i.test(
           message
         )
       ) {
-        await restoreSubscription();
-        return;
-      }
-
-      /*
-       * Do not show cancellation as a scary
-       * error message.
-       */
-      if (
-        /cancel/i.test(message)
-      ) {
         setNotice(
-          "The Amazon purchase was cancelled."
-        );
-      } else {
-        setNotice(
-          "Amazon subscription failed: " +
-            message
+          `Amazon purchase could not be completed: ${message}`
         );
       }
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   }
 
-  async function restoreSubscription() {
-    setNotice("");
-    setLoading(true);
+  async function restoreAmazonPurchase() {
+    setNotice(null);
+
+    if (
+      !Capacitor.isNativePlatform()
+    ) {
+      setNotice(
+        "Restore is available in the Android Amazon Appstore version of CartCue."
+      );
+      return;
+    }
+
+    setBusy(true);
 
     try {
-      if (
-        Capacitor.getPlatform() !==
-        "android"
-      ) {
-        setNotice(
-          "Amazon subscription restore is available in the Android Amazon Appstore version of CartCue."
-        );
-
-        return;
-      }
-
-      /*
-       * Ask Amazon for the customer's
-       * existing purchases.
-       */
       const result =
         await AmazonIAP.restorePurchases();
 
@@ -189,76 +194,59 @@ export default function SubscriptionPage() {
           : [];
 
       /*
-       * Find the CartCue subscription.
-       *
-       * App Tester may return:
-       *
-       * CartCue_monthly_sub_term
-       *
-       * for termSku.
+       * Amazon can return the parent SKU in
+       * receipt.sku and the term SKU in
+       * receipt.termSku.
        */
-      const receipt =
+      const activeReceipt =
         receipts.find(
-          (item) => {
-            const sku =
-              item?.sku || "";
+          (receipt) => {
+            const parent =
+              receipt?.sku;
 
-            const termSku =
-              item?.termSku || "";
+            const term =
+              receipt?.termSku;
+
+            const skuMatches =
+              parent ===
+                AMAZON_PARENT_SKU ||
+              parent ===
+                AMAZON_SUB_SKU ||
+              term ===
+                AMAZON_SUB_SKU ||
+              term ===
+                AMAZON_PARENT_SKU;
 
             return (
-              sku ===
-                AMAZON_SUB_SKU ||
-              sku ===
-                "CartCue_monthly_sub" ||
-              sku ===
-                "CartCue_monthly_sub_term" ||
-              termSku ===
-                AMAZON_SUB_SKU ||
-              termSku ===
-                "CartCue_monthly_sub" ||
-              termSku ===
-                "CartCue_monthly_sub_term"
+              skuMatches &&
+              !receipt?.canceled &&
+              !!receipt?.receiptId
             );
           }
         );
 
-      if (!receipt) {
-        setNotice(
-          "Amazon did not find a CartCue subscription to restore."
-        );
-
-        return;
-      }
-
       if (
-        !receipt.receiptId
+        !activeReceipt?.receiptId
       ) {
         setNotice(
-          "Amazon returned the subscription without a receipt ID."
+          "No active CartCue Amazon subscription was found."
         );
-
         return;
       }
 
-      if (
-        !result?.userId
-      ) {
-        setNotice(
-          "Amazon did not return the customer ID required for verification."
-        );
+      const userId =
+        result?.userId;
 
-        return;
+      if (!userId) {
+        throw new Error(
+          "Amazon did not return the customer ID needed to restore the subscription."
+        );
       }
 
-      /*
-       * ALWAYS verify restored purchases
-       * through the server.
-       */
       const verification =
         await AmazonIAP.verifyAmazonReceipt(
-          receipt.receiptId,
-          result.userId,
+          activeReceipt.receiptId,
+          userId,
           AMAZON_SUB_SKU
         );
 
@@ -266,334 +254,245 @@ export default function SubscriptionPage() {
         !verification?.active
       ) {
         setNotice(
-          "Amazon found the subscription, but it is not currently active."
+          verification?.error ||
+            "Amazon did not verify an active subscription."
         );
-
         return;
       }
 
-      /*
-       * Save only after successful
-       * Amazon RVS verification.
-       */
-      saveAmazonSubscription({
-        active: true,
+      await AmazonIAP.fulfillPurchase(
+        activeReceipt.receiptId
+      );
 
-        autoRenewing:
-          verification.autoRenewing !==
-          false,
-
-        renewalDate:
-          verification.renewalDate ??
-          null,
-
-        cancelDate:
-          verification.cancelDate ??
-          null,
-
-        freeTrialEndDate:
-          verification.freeTrialEndDate ??
-          null,
-
-        receiptId:
-          receipt.receiptId,
-
-        verifiedAt:
-          Date.now(),
-      });
-
-      /*
-       * Tell Amazon the receipt was handled.
-       */
-      try {
-        await AmazonIAP.fulfillPurchase(
-          receipt.receiptId
-        );
-      } catch (fulfillError) {
-        /*
-         * Verification succeeded.
-         *
-         * Fulfillment failure should be logged,
-         * but should not remove the verified
-         * subscription.
-         */
-        console.error(
-          "Amazon fulfillment error:",
-          fulfillError
-        );
-      }
+      activateAmazonSub(
+        activeReceipt.receiptId,
+        verification
+      );
 
       setState(
         getPlanState()
       );
 
       setNotice(
-        "Your Amazon subscription was verified and restored successfully."
+        "Your CartCue Pro subscription has been restored."
       );
     } catch (error) {
-      console.error(
-        "Amazon restore error:",
-        error
-      );
-
       const message =
         error instanceof Error
           ? error.message
           : String(error);
 
       setNotice(
-        "Could not restore the Amazon subscription: " +
-          message
+        `Could not restore the Amazon subscription: ${message}`
       );
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   }
 
-  function manageSubscription() {
+  function handleManageSubscription() {
     setNotice(
-      "To manage or cancel billing, use your Amazon Appstore subscription settings."
+      "To cancel, open the Amazon Appstore and manage CartCue under your subscriptions. Cancelling there stops future Amazon billing."
     );
   }
 
-  const isPro =
-    state?.plan === "pro";
+  /*
+   * KEEP THE REST OF YOUR EXISTING JSX BELOW THIS POINT.
+   */
 
   return (
-    <main className="min-h-screen bg-neutral-100 px-4 py-8">
-
-      <div className="mx-auto max-w-5xl">
-
-        <div className="mb-8">
-
-          <h1 className="text-3xl font-bold text-neutral-900">
-            CartCue Pro
+    <div className="min-h-screen bg-neutral-100">
+      <header className="border-b border-neutral-200 bg-white">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
+          <h1 className="text-xl font-bold text-neutral-900">
+            Cart
+            <span className="text-orange-600">
+              Cue
+            </span>{" "}
+            Subscription
           </h1>
 
-          <p className="mt-2 text-neutral-600">
+          <a
+            href="/"
+            className="text-sm font-medium text-orange-600 hover:underline"
+          >
+            ← Back to app
+          </a>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-5xl px-4 py-8">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-neutral-900">
+            CartCue Pro
+          </h2>
+
+          <p className="mt-1 text-sm text-neutral-600">
             Create more content with CartCue Pro.
           </p>
-
         </div>
 
         {state && (
-          <div className="mb-6 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-
-            <div className="text-sm text-neutral-600">
+          <div className="mb-6 rounded-xl bg-white p-5 shadow-sm">
+            <div className="text-xs text-neutral-500">
               Current plan
             </div>
 
-            <div className="mt-1 text-lg font-bold text-neutral-900">
+            <div className="mt-1 font-semibold text-neutral-900">
               {state.plan === "pro"
-                ? "Pro"
+                ? "CartCue Pro"
                 : state.plan === "trial"
                 ? "7-Day Trial"
                 : "Free"}
             </div>
 
-            {state.trialEndsAt &&
-              state.plan === "trial" && (
-                <div className="mt-1 text-sm text-neutral-500">
-                  Trial ends{" "}
-                  {new Date(
-                    state.trialEndsAt
-                  ).toLocaleDateString()}
-                </div>
-              )}
-
-            {state.generationsLeft !==
-              null && (
-              <div className="mt-1 text-sm text-neutral-500">
-                Generations remaining:{" "}
-                {state.generationsLeft}
+            {state.trialEndsAt && (
+              <div className="mt-1 text-xs text-neutral-500">
+                Trial ends{" "}
+                {new Date(
+                  state.trialEndsAt
+                ).toLocaleDateString()}
               </div>
             )}
 
+            {state.generationsLeft !==
+              null && (
+              <div className="mt-1 text-xs text-neutral-500">
+                Generations remaining:{" "}
+                {
+                  state.generationsLeft
+                }
+              </div>
+            )}
+
+            {state.subscriptionEndAt && (
+              <div className="mt-1 text-xs text-neutral-500">
+                Subscription access until{" "}
+                {new Date(
+                  state.subscriptionEndAt
+                ).toLocaleDateString()}
+              </div>
+            )}
           </div>
         )}
 
         {notice && (
-          <div className="mb-6 rounded-xl border border-neutral-200 bg-white p-4 text-sm text-neutral-700 shadow-sm">
+          <div className="mb-6 rounded-xl border border-neutral-200 bg-white p-4 text-sm text-neutral-700">
             {notice}
           </div>
         )}
 
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="rounded-xl border border-neutral-200 bg-white p-5">
+            <div className="text-xs font-semibold text-neutral-500">
+              FREE
+            </div>
 
-          {/* FREE */}
-
-          <section className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
-
-            <h2 className="text-xl font-bold text-neutral-900">
-              Free
-            </h2>
-
-            <p className="mt-2 text-3xl font-bold text-neutral-900">
+            <div className="mt-2 text-3xl font-bold text-neutral-900">
               $0
-            </p>
+            </div>
 
             <p className="mt-1 text-sm text-neutral-500">
               For basic use.
             </p>
 
-            <ul className="mt-6 space-y-3 text-sm text-neutral-700">
-
-              <li>
-                ✓ Basic content creation
-              </li>
-
-              <li>
-                ✓ Save your content
-              </li>
-
-              <li>
-                ✓ Basic features
-              </li>
-
+            <ul className="mt-5 space-y-2 text-sm text-neutral-700">
+              <li>✓ Basic content creation</li>
+              <li>✓ Save your content</li>
+              <li>✓ Basic features</li>
             </ul>
-
-            <a
-              href="/"
-              className="mt-8 block rounded-xl border border-neutral-300 px-4 py-3 text-center font-semibold text-neutral-700"
-            >
-              Continue Free
-            </a>
-
-          </section>
-
-          {/* PRO */}
-
-          <section className="rounded-2xl border-2 border-orange-500 bg-white p-6 shadow-md">
-
-            <div className="mb-3 inline-block rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-700">
-              PRO
-            </div>
-
-            <h2 className="text-xl font-bold text-neutral-900">
-              CartCue Pro
-            </h2>
-
-            <div className="mt-2">
-
-              <span className="text-4xl font-bold text-neutral-900">
-                $4.99
-              </span>
-
-              <span className="text-neutral-500">
-                /month
-              </span>
-
-            </div>
-
-            <p className="mt-2 text-sm text-neutral-500">
-              7-day free trial
-            </p>
-
-            <ul className="mt-6 space-y-3 text-sm text-neutral-700">
-
-              <li>
-                ✓ Unlimited content creation
-              </li>
-
-              <li>
-                ✓ Pro features
-              </li>
-
-              <li>
-                ✓ Advanced tools
-              </li>
-
-              <li>
-                ✓ Amazon Appstore billing
-              </li>
-
-              <li>
-                ✓ 7-day free trial
-              </li>
-
-            </ul>
-
-            {!isPro && (
-              <button
-                type="button"
-                onClick={
-                  startSubscription
-                }
-                disabled={loading}
-                className="mt-8 w-full rounded-xl bg-orange-500 px-4 py-3 font-bold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {loading
-                  ? "Connecting to Amazon..."
-                  : "Start 7-Day Free Trial"}
-              </button>
-            )}
-
-            {isPro && (
-              <div className="mt-8 rounded-xl bg-green-50 p-4 text-center font-semibold text-green-700">
-                ✓ Pro is active
-              </div>
-            )}
 
             <button
               type="button"
+              className="mt-6 w-full rounded-lg border border-neutral-200 px-4 py-3 text-sm font-semibold text-neutral-700"
+            >
+              Continue Free
+            </button>
+          </div>
+
+          <div className="rounded-xl border-2 border-orange-300 bg-white p-5">
+            <div className="text-xs font-semibold text-orange-600">
+              PRO
+            </div>
+
+            <div className="mt-2 text-xl font-bold text-neutral-900">
+              CartCue Pro
+            </div>
+
+            <div className="mt-1 text-3xl font-bold text-neutral-900">
+              $4.99
+              <span className="text-sm font-normal text-neutral-500">
+                /month
+              </span>
+            </div>
+
+            <p className="mt-1 text-sm text-neutral-500">
+              7-day free trial
+            </p>
+
+            <ul className="mt-5 space-y-2 text-sm text-neutral-700">
+              <li>✓ Unlimited content creation</li>
+              <li>✓ Pro features</li>
+              <li>✓ Advanced tools</li>
+              <li>✓ Amazon Appstore billing</li>
+              <li>✓ 7-day free trial</li>
+            </ul>
+
+            <button
+              type="button"
+              disabled={busy}
               onClick={
-                restoreSubscription
+                handleAmazonPurchase
               }
-              disabled={loading}
-              className="mt-3 w-full rounded-xl border border-neutral-300 px-4 py-3 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+              className="mt-6 w-full rounded-lg bg-orange-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {busy
+                ? "Processing Amazon payment…"
+                : "Start 7-Day Free Trial"}
+            </button>
+
+            <button
+              type="button"
+              disabled={busy}
+              onClick={
+                restoreAmazonPurchase
+              }
+              className="mt-2 w-full rounded-lg border border-neutral-200 px-4 py-3 text-sm font-semibold text-neutral-700 disabled:opacity-50"
             >
               Restore Amazon Subscription
             </button>
 
-            {isPro && (
-              <button
-                type="button"
-                onClick={
-                  manageSubscription
-                }
-                className="mt-3 w-full rounded-xl border border-red-200 px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50"
-              >
-                Manage / Cancel Subscription
-              </button>
-            )}
-
-            <div className="mt-4 text-center">
-
-              <p className="text-[10px] text-neutral-400">
-                Amazon SKU
-              </p>
-
-              <p className="font-mono text-[10px] text-neutral-400">
-                {AMAZON_SUB_SKU}
-              </p>
-
+            <div className="mt-4 text-center text-[10px] text-neutral-400">
+              Amazon Parent SKU:{" "}
+              {AMAZON_PARENT_SKU}
+              <br />
+              Amazon Term SKU:{" "}
+              {AMAZON_SUB_SKU}
             </div>
-
-          </section>
-
+          </div>
         </div>
 
-        <div className="mt-8 rounded-xl border border-orange-200 bg-orange-50 p-4 text-center text-xs text-neutral-600">
-
-          <p className="font-semibold text-neutral-800">
-            7-day free trial
-          </p>
-
-          <p className="mt-1">
-            If you subscribe through Amazon,
-            Amazon handles the subscription,
-            renewal and billing.
-          </p>
-
-          <p className="mt-1">
-            You can manage or cancel the
-            subscription through Amazon.
-          </p>
-
+        <div className="mt-6 rounded-xl border border-orange-100 bg-orange-50 p-4 text-center text-xs text-neutral-600">
+          <strong>7-day free trial</strong>
+          <br />
+          If you subscribe through Amazon,
+          Amazon handles the subscription,
+          renewal and billing.
+          <br />
+          You can manage or cancel the
+          subscription through Amazon.
         </div>
 
-      </div>
-
-    </main>
+        <button
+          type="button"
+          onClick={
+            handleManageSubscription
+          }
+          className="mt-4 w-full text-sm text-orange-600 hover:underline"
+        >
+          Manage Amazon Subscription
+        </button>
+      </main>
+    </div>
   );
       }
