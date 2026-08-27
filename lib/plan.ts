@@ -1,3 +1,6 @@
+export const AMAZON_PARENT_SKU =
+  "CartCue_monthly_sub";
+
 export const AMAZON_SUB_SKU =
   "CartCue_monthly_term";
 
@@ -13,21 +16,20 @@ export type PlanState = {
   freeTrialEndAt: string | null;
 };
 
-type StoredSubscription = {
+export type StoredSubscription = {
   active: boolean;
   autoRenewing: boolean;
   renewalDate: number | null;
   cancelDate: number | null;
   freeTrialEndDate: number | null;
+  gracePeriodEndDate: number | null;
   receiptId: string | null;
   verifiedAt: number;
 };
 
 function getStoredSubscription():
   StoredSubscription | null {
-  if (
-    typeof window === "undefined"
-  ) {
+  if (typeof window === "undefined") {
     return null;
   }
 
@@ -37,11 +39,13 @@ function getStoredSubscription():
         "cartcue_amazon_subscription"
       );
 
-    return raw
-      ? (JSON.parse(
-          raw
-        ) as StoredSubscription)
-      : null;
+    if (!raw) {
+      return null;
+    }
+
+    return JSON.parse(
+      raw
+    ) as StoredSubscription;
   } catch {
     return null;
   }
@@ -50,9 +54,7 @@ function getStoredSubscription():
 export function saveAmazonSubscription(
   subscription: StoredSubscription
 ) {
-  if (
-    typeof window === "undefined"
-  ) {
+  if (typeof window === "undefined") {
     return;
   }
 
@@ -61,16 +63,20 @@ export function saveAmazonSubscription(
     JSON.stringify(subscription)
   );
 
-  localStorage.setItem(
-    "cartcue_pro",
-    "true"
-  );
+  if (subscription.active) {
+    localStorage.setItem(
+      "cartcue_pro",
+      "true"
+    );
+  } else {
+    localStorage.removeItem(
+      "cartcue_pro"
+    );
+  }
 }
 
 export function clearAmazonSubscription() {
-  if (
-    typeof window === "undefined"
-  ) {
+  if (typeof window === "undefined") {
     return;
   }
 
@@ -84,9 +90,7 @@ export function clearAmazonSubscription() {
 }
 
 function getLocalTrial() {
-  if (
-    typeof window === "undefined"
-  ) {
+  if (typeof window === "undefined") {
     return {
       plan: "trial" as const,
       trialEndsAt: null,
@@ -121,12 +125,13 @@ function getLocalTrial() {
   const endDate =
     new Date(end);
 
-  const used = parseInt(
-    localStorage.getItem(
-      "cartcue_generations_used"
-    ) || "0",
-    10
-  );
+  const used =
+    parseInt(
+      localStorage.getItem(
+        "cartcue_generations_used"
+      ) || "0",
+      10
+    );
 
   if (Date.now() >= end) {
     return {
@@ -150,11 +155,36 @@ function getLocalTrial() {
   };
 }
 
-export function getPlanState():
-  PlanState {
-  if (
-    typeof window === "undefined"
-  ) {
+function isSubscriptionActive(
+  subscription: StoredSubscription
+) {
+  if (!subscription.active) {
+    return false;
+  }
+
+  const now = Date.now();
+
+  /*
+   * Amazon's cancelDate indicates the
+   * subscription has been cancelled.
+   * Access can remain available until
+   * the current paid/trial period ends.
+   */
+  const end =
+    subscription.cancelDate ??
+    subscription.renewalDate ??
+    subscription.gracePeriodEndDate ??
+    subscription.freeTrialEndDate ??
+    null;
+
+  return (
+    !end ||
+    end > now
+  );
+}
+
+export function getPlanState(): PlanState {
+  if (typeof window === "undefined") {
     return {
       plan: "trial",
       trialEndsAt: null,
@@ -169,34 +199,42 @@ export function getPlanState():
   const subscription =
     getStoredSubscription();
 
-  if (subscription?.active) {
-    const now = Date.now();
-
+  if (
+    subscription &&
+    isSubscriptionActive(
+      subscription
+    )
+  ) {
     const end =
-      subscription.cancelDate ||
-      subscription.renewalDate ||
-      subscription.freeTrialEndDate;
+      subscription.cancelDate ??
+      subscription.renewalDate ??
+      subscription.gracePeriodEndDate ??
+      subscription.freeTrialEndDate ??
+      null;
 
-    if (!end || end > now) {
-      return {
-        plan: "pro",
-        trialEndsAt: null,
-        generationsLeft: null,
-        subscriptionEndAt: end
+    return {
+      plan: "pro",
+      trialEndsAt: null,
+      generationsLeft: null,
+      subscriptionEndAt:
+        end
           ? new Date(
               end
             ).toISOString()
           : null,
-        autoRenewing:
-          subscription.autoRenewing,
-        freeTrialEndAt:
-          subscription.freeTrialEndDate
-            ? new Date(
-                subscription.freeTrialEndDate
-              ).toISOString()
-            : null,
-      };
-    }
+      autoRenewing:
+        subscription.autoRenewing,
+      freeTrialEndAt:
+        subscription.freeTrialEndDate
+          ? new Date(
+              subscription.freeTrialEndDate
+            ).toISOString()
+          : null,
+    };
+  }
+
+  if (subscription) {
+    clearAmazonSubscription();
   }
 
   const trial =
@@ -246,7 +284,8 @@ export function getTrialTimeLeft() {
 
   return {
     hours: Math.floor(
-      difference / 3600000
+      difference /
+        3600000
     ),
     minutes: Math.floor(
       (difference %
@@ -258,18 +297,17 @@ export function getTrialTimeLeft() {
 }
 
 export function consumeGeneration() {
-  if (
-    typeof window === "undefined"
-  ) {
+  if (typeof window === "undefined") {
     return;
   }
 
-  const used = parseInt(
-    localStorage.getItem(
-      "cartcue_generations_used"
-    ) || "0",
-    10
-  );
+  const used =
+    parseInt(
+      localStorage.getItem(
+        "cartcue_generations_used"
+      ) || "0",
+      10
+    );
 
   localStorage.setItem(
     "cartcue_generations_used",
@@ -278,9 +316,7 @@ export function consumeGeneration() {
 }
 
 export function activatePro() {
-  if (
-    typeof window === "undefined"
-  ) {
+  if (typeof window === "undefined") {
     return;
   }
 
@@ -291,9 +327,7 @@ export function activatePro() {
 }
 
 export function resetTrial() {
-  if (
-    typeof window === "undefined"
-  ) {
+  if (typeof window === "undefined") {
     return;
   }
 
@@ -312,4 +346,54 @@ export function resetTrial() {
   localStorage.removeItem(
     "cartcue_amazon_subscription"
   );
-      }
+}
+
+export function activateAmazonSub(
+  receiptId: string | null,
+  verification: {
+    active: boolean;
+    autoRenewing?: boolean;
+    renewalDate?: number | null;
+    cancelDate?: number | null;
+    freeTrialEndDate?: number | null;
+    gracePeriodEndDate?: number | null;
+  }
+) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (!verification.active) {
+    clearAmazonSubscription();
+    return;
+  }
+
+  saveAmazonSubscription({
+    active: true,
+
+    autoRenewing:
+      verification.autoRenewing !== false,
+
+    renewalDate:
+      verification.renewalDate ??
+      null,
+
+    cancelDate:
+      verification.cancelDate ??
+      null,
+
+    freeTrialEndDate:
+      verification.freeTrialEndDate ??
+      null,
+
+    gracePeriodEndDate:
+      verification.gracePeriodEndDate ??
+      null,
+
+    receiptId:
+      receiptId || null,
+
+    verifiedAt:
+      Date.now(),
+  });
+}
