@@ -3,9 +3,6 @@ import { NextResponse } from "next/server";
 const AMAZON_PARENT_SKU =
   "CartCue_monthly_sub";
 
-const AMAZON_TERM_SKU =
-  "CartCue_monthly_term";
-
 type AmazonRvsResponse = {
   autoRenewing?: boolean;
   cancelDate?: number | null;
@@ -21,9 +18,7 @@ type AmazonRvsResponse = {
   testTransaction?: boolean;
 };
 
-function encodePart(
-  value: string
-) {
+function encodePart(value: string) {
   return encodeURIComponent(value);
 }
 
@@ -31,30 +26,22 @@ export async function POST(
   request: Request
 ) {
   try {
-    const body =
-      await request.json();
+    const body = await request.json();
 
     const receiptId =
-      String(
-        body?.receiptId || ""
-      ).trim();
+      String(body?.receiptId || "").trim();
 
     const userId =
-      String(
-        body?.userId || ""
-      ).trim();
+      String(body?.userId || "").trim();
 
     const requestedSku =
-      String(
-        body?.sku || ""
-      ).trim();
+      String(body?.sku || "").trim();
 
     if (!receiptId) {
       return NextResponse.json(
         {
           active: false,
-          error:
-            "Missing Amazon receipt ID.",
+          error: "Missing Amazon receipt ID.",
         },
         { status: 400 }
       );
@@ -64,16 +51,14 @@ export async function POST(
       return NextResponse.json(
         {
           active: false,
-          error:
-            "Missing Amazon user ID.",
+          error: "Missing Amazon user ID.",
         },
         { status: 400 }
       );
     }
 
     const secret =
-      process.env
-        .AMAZON_RVS_SHARED_SECRET;
+      process.env.AMAZON_RVS_SHARED_SECRET;
 
     if (!secret) {
       console.error(
@@ -167,21 +152,6 @@ export async function POST(
       );
     }
 
-    /*
-     * Production:
-     * termSku should be the real term SKU.
-     *
-     * App Tester/RVS Sandbox:
-     * Amazon may return:
-     *
-     * CartCue_monthly_sub_term
-     *
-     * instead of the real term SKU.
-     */
-
-    const sandboxTermSku =
-      `${AMAZON_PARENT_SKU}_term`;
-
     const skuMatches =
       !requestedSku ||
       receipt.productId ===
@@ -191,21 +161,7 @@ export async function POST(
       receipt.productId ===
         AMAZON_PARENT_SKU ||
       receipt.termSku ===
-        AMAZON_PARENT_SKU ||
-      receipt.productId ===
-        AMAZON_TERM_SKU ||
-      receipt.termSku ===
-        AMAZON_TERM_SKU ||
-      (
-        receipt.testTransaction ===
-          true &&
-        (
-          receipt.productId ===
-            sandboxTermSku ||
-          receipt.termSku ===
-            sandboxTermSku
-        )
-      );
+        AMAZON_PARENT_SKU;
 
     if (!skuMatches) {
       console.error(
@@ -229,16 +185,13 @@ export async function POST(
       );
     }
 
-    const now =
-      Date.now();
+    const now = Date.now();
 
     const cancelDate =
-      receipt.cancelDate ??
-      null;
+      receipt.cancelDate ?? null;
 
     const renewalDate =
-      receipt.renewalDate ??
-      null;
+      receipt.renewalDate ?? null;
 
     const trialEnd =
       receipt.freeTrialEndDate ??
@@ -251,8 +204,8 @@ export async function POST(
     const accessEnd =
       cancelDate ||
       renewalDate ||
-      graceEnd ||
       trialEnd ||
+      graceEnd ||
       null;
 
     const active =
@@ -267,7 +220,6 @@ export async function POST(
 
     return NextResponse.json({
       active,
-
       canceled:
         !!cancelDate &&
         cancelDate <= now,
@@ -323,4 +275,4 @@ export async function POST(
       { status: 500 }
     );
   }
-        }
+      }
