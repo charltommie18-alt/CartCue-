@@ -29,8 +29,19 @@ public class MainActivity
         super.onResume();
 
         try {
+            /*
+             * Ask Amazon for the current customer.
+             */
             PurchasingService.getUserData();
 
+            /*
+             * Validate BOTH the subscription parent
+             * and its child/term SKU.
+             *
+             * Amazon requires the parent and all child
+             * subscription SKUs to be supplied when
+             * calling getProductData().
+             */
             Set<String> productSkus =
                     new HashSet<>();
 
@@ -46,14 +57,24 @@ public class MainActivity
                     productSkus
             );
 
+            /*
+             * Synchronize purchases.
+             *
+             * This allows CartCue to discover an
+             * existing subscription when the app
+             * starts or resumes.
+             */
             PurchasingService.getPurchaseUpdates(
                     false
             );
+
         } catch (
                 Exception ignored
         ) {
-            // Amazon Appstore may not be available
-            // in some non-Amazon environments.
+            /*
+             * The Amazon Appstore may not be available
+             * when this APK is launched outside Amazon.
+             */
         }
     }
         }
