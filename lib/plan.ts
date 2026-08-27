@@ -396,4 +396,4 @@ export function activateAmazonSub(
     verifiedAt:
       Date.now(),
   });
-}
+    }
