@@ -8,32 +8,63 @@ const TRIAL_DAYS = 7;
 const TRIAL_GENERATIONS = 10;
 
 export type PlanState = {
-  plan: "trial" | "free" | "pro";
+  plan:
+    | "trial"
+    | "free"
+    | "pro";
+
   trialEndsAt: string | null;
-  generationsLeft: number | null;
-  subscriptionEndAt: string | null;
-  autoRenewing: boolean;
-  freeTrialEndAt: string | null;
+
+  generationsLeft:
+    number | null;
+
+  subscriptionEndAt:
+    string | null;
+
+  autoRenewing:
+    boolean;
+
+  freeTrialEndAt:
+    string | null;
 };
 
 export type StoredSubscription = {
   active: boolean;
-  autoRenewing: boolean;
-  renewalDate: number | null;
-  cancelDate: number | null;
-  freeTrialEndDate: number | null;
-  gracePeriodEndDate: number | null;
-  receiptId: string | null;
-  verifiedAt: number;
+
+  autoRenewing:
+    boolean;
+
+  renewalDate:
+    number | null;
+
+  cancelDate:
+    number | null;
+
+  freeTrialEndDate:
+    number | null;
+
+  gracePeriodEndDate:
+    number | null;
+
+  receiptId:
+    string | null;
+
+  verifiedAt:
+    number;
 };
 
 function getStoredSubscription():
   StoredSubscription | null {
-  if (typeof window === "undefined") {
+
+  if (
+    typeof window ===
+    "undefined"
+  ) {
     return null;
   }
 
   try {
+
     const raw =
       localStorage.getItem(
         "cartcue_amazon_subscription"
@@ -46,29 +77,43 @@ function getStoredSubscription():
     return JSON.parse(
       raw
     ) as StoredSubscription;
+
   } catch {
+
     return null;
   }
 }
 
 export function saveAmazonSubscription(
-  subscription: StoredSubscription
+  subscription:
+    StoredSubscription
 ) {
-  if (typeof window === "undefined") {
+
+  if (
+    typeof window ===
+    "undefined"
+  ) {
     return;
   }
 
   localStorage.setItem(
     "cartcue_amazon_subscription",
-    JSON.stringify(subscription)
+    JSON.stringify(
+      subscription
+    )
   );
 
-  if (subscription.active) {
+  if (
+    subscription.active
+  ) {
+
     localStorage.setItem(
       "cartcue_pro",
       "true"
     );
+
   } else {
+
     localStorage.removeItem(
       "cartcue_pro"
     );
@@ -76,7 +121,11 @@ export function saveAmazonSubscription(
 }
 
 export function clearAmazonSubscription() {
-  if (typeof window === "undefined") {
+
+  if (
+    typeof window ===
+    "undefined"
+  ) {
     return;
   }
 
@@ -90,10 +139,19 @@ export function clearAmazonSubscription() {
 }
 
 function getLocalTrial() {
-  if (typeof window === "undefined") {
+
+  if (
+    typeof window ===
+    "undefined"
+  ) {
+
     return {
-      plan: "trial" as const,
-      trialEndsAt: null,
+      plan:
+        "trial" as const,
+
+      trialEndsAt:
+        null,
+
       generationsLeft:
         TRIAL_GENERATIONS,
     };
@@ -105,6 +163,7 @@ function getLocalTrial() {
     );
 
   if (!start) {
+
     start =
       new Date().toISOString();
 
@@ -122,9 +181,6 @@ function getLocalTrial() {
       60 *
       1000;
 
-  const endDate =
-    new Date(end);
-
   const used =
     parseInt(
       localStorage.getItem(
@@ -133,19 +189,33 @@ function getLocalTrial() {
       10
     );
 
-  if (Date.now() >= end) {
+  if (
+    Date.now() >= end
+  ) {
+
     return {
-      plan: "free" as const,
+      plan:
+        "free" as const,
+
       trialEndsAt:
-        endDate.toISOString(),
-      generationsLeft: 0,
+        new Date(
+          end
+        ).toISOString(),
+
+      generationsLeft:
+        0,
     };
   }
 
   return {
-    plan: "trial" as const,
+    plan:
+      "trial" as const,
+
     trialEndsAt:
-      endDate.toISOString(),
+      new Date(
+        end
+      ).toISOString(),
+
     generationsLeft:
       Math.max(
         0,
@@ -156,43 +226,79 @@ function getLocalTrial() {
 }
 
 function isSubscriptionActive(
-  subscription: StoredSubscription
+  subscription:
+    StoredSubscription
 ) {
-  if (!subscription.active) {
+
+  if (
+    !subscription.active
+  ) {
     return false;
   }
 
-  const now = Date.now();
+  const now =
+    Date.now();
 
   /*
-   * Amazon's cancelDate indicates the
-   * subscription has been cancelled.
-   * Access can remain available until
-   * the current paid/trial period ends.
+   * If Amazon supplied an actual end date,
+   * respect it.
    */
-  const end =
-    subscription.cancelDate ??
-    subscription.renewalDate ??
-    subscription.gracePeriodEndDate ??
-    subscription.freeTrialEndDate ??
-    null;
-
-  return (
-    !end ||
-    end > now
+  const dates = [
+    subscription.cancelDate,
+    subscription.renewalDate,
+    subscription.gracePeriodEndDate,
+    subscription.freeTrialEndDate,
+  ].filter(
+    (
+      value
+    ): value is number =>
+      typeof value ===
+        "number" &&
+      value > 0
   );
+
+  if (
+    dates.length === 0
+  ) {
+    return true;
+  }
+
+  /*
+   * Use the latest future date as the
+   * customer's access boundary.
+   */
+  const latest =
+    Math.max(...dates);
+
+  return latest > now;
 }
 
-export function getPlanState(): PlanState {
-  if (typeof window === "undefined") {
+export function getPlanState():
+  PlanState {
+
+  if (
+    typeof window ===
+    "undefined"
+  ) {
+
     return {
-      plan: "trial",
-      trialEndsAt: null,
+      plan:
+        "trial",
+
+      trialEndsAt:
+        null,
+
       generationsLeft:
         TRIAL_GENERATIONS,
-      subscriptionEndAt: null,
-      autoRenewing: false,
-      freeTrialEndAt: null,
+
+      subscriptionEndAt:
+        null,
+
+      autoRenewing:
+        false,
+
+      freeTrialEndAt:
+        null,
     };
   }
 
@@ -205,25 +311,46 @@ export function getPlanState(): PlanState {
       subscription
     )
   ) {
+
+    const dates = [
+      subscription.cancelDate,
+      subscription.renewalDate,
+      subscription.gracePeriodEndDate,
+      subscription.freeTrialEndDate,
+    ].filter(
+      (
+        value
+      ): value is number =>
+        typeof value ===
+          "number" &&
+        value > 0
+    );
+
     const end =
-      subscription.cancelDate ??
-      subscription.renewalDate ??
-      subscription.gracePeriodEndDate ??
-      subscription.freeTrialEndDate ??
-      null;
+      dates.length
+        ? Math.max(...dates)
+        : null;
 
     return {
-      plan: "pro",
-      trialEndsAt: null,
-      generationsLeft: null,
+      plan:
+        "pro",
+
+      trialEndsAt:
+        null,
+
+      generationsLeft:
+        null,
+
       subscriptionEndAt:
         end
           ? new Date(
               end
             ).toISOString()
           : null,
+
       autoRenewing:
         subscription.autoRenewing,
+
       freeTrialEndAt:
         subscription.freeTrialEndDate
           ? new Date(
@@ -233,7 +360,9 @@ export function getPlanState(): PlanState {
     };
   }
 
-  if (subscription) {
+  if (
+    subscription
+  ) {
     clearAmazonSubscription();
   }
 
@@ -241,30 +370,43 @@ export function getPlanState(): PlanState {
     getLocalTrial();
 
   return {
-    plan: trial.plan,
+    plan:
+      trial.plan,
+
     trialEndsAt:
       trial.trialEndsAt,
+
     generationsLeft:
       trial.generationsLeft,
-    subscriptionEndAt: null,
-    autoRenewing: false,
-    freeTrialEndAt: null,
+
+    subscriptionEndAt:
+      null,
+
+    autoRenewing:
+      false,
+
+    freeTrialEndAt:
+      null,
   };
 }
 
 export function getTrialTimeLeft() {
+
   const state =
     getPlanState();
 
   if (
-    state.plan !== "trial" ||
+    state.plan !==
+      "trial" ||
     !state.trialEndsAt
   ) {
+
     return {
       hours: 0,
       minutes: 0,
       expired:
-        state.plan === "free",
+        state.plan ===
+        "free",
     };
   }
 
@@ -274,7 +416,10 @@ export function getTrialTimeLeft() {
     ).getTime() -
     Date.now();
 
-  if (difference <= 0) {
+  if (
+    difference <= 0
+  ) {
+
     return {
       hours: 0,
       minutes: 0,
@@ -283,21 +428,29 @@ export function getTrialTimeLeft() {
   }
 
   return {
-    hours: Math.floor(
-      difference /
-        3600000
-    ),
-    minutes: Math.floor(
-      (difference %
-        3600000) /
-        60000
-    ),
+    hours:
+      Math.floor(
+        difference /
+          3600000
+      ),
+
+    minutes:
+      Math.floor(
+        (difference %
+          3600000) /
+          60000
+      ),
+
     expired: false,
   };
 }
 
 export function consumeGeneration() {
-  if (typeof window === "undefined") {
+
+  if (
+    typeof window ===
+    "undefined"
+  ) {
     return;
   }
 
@@ -311,12 +464,18 @@ export function consumeGeneration() {
 
   localStorage.setItem(
     "cartcue_generations_used",
-    String(used + 1)
+    String(
+      used + 1
+    )
   );
 }
 
 export function activatePro() {
-  if (typeof window === "undefined") {
+
+  if (
+    typeof window ===
+    "undefined"
+  ) {
     return;
   }
 
@@ -327,7 +486,11 @@ export function activatePro() {
 }
 
 export function resetTrial() {
-  if (typeof window === "undefined") {
+
+  if (
+    typeof window ===
+    "undefined"
+  ) {
     return;
   }
 
@@ -350,29 +513,49 @@ export function resetTrial() {
 
 export function activateAmazonSub(
   receiptId: string | null,
+
   verification: {
     active: boolean;
-    autoRenewing?: boolean;
-    renewalDate?: number | null;
-    cancelDate?: number | null;
-    freeTrialEndDate?: number | null;
-    gracePeriodEndDate?: number | null;
+
+    autoRenewing?:
+      boolean;
+
+    renewalDate?:
+      number | null;
+
+    cancelDate?:
+      number | null;
+
+    freeTrialEndDate?:
+      number | null;
+
+    gracePeriodEndDate?:
+      number | null;
   }
 ) {
-  if (typeof window === "undefined") {
+
+  if (
+    typeof window ===
+    "undefined"
+  ) {
     return;
   }
 
-  if (!verification.active) {
+  if (
+    !verification.active
+  ) {
+
     clearAmazonSubscription();
     return;
   }
 
   saveAmazonSubscription({
+
     active: true,
 
     autoRenewing:
-      verification.autoRenewing !== false,
+      verification.autoRenewing !==
+      false,
 
     renewalDate:
       verification.renewalDate ??
@@ -391,7 +574,8 @@ export function activateAmazonSub(
       null,
 
     receiptId:
-      receiptId || null,
+      receiptId ||
+      null,
 
     verifiedAt:
       Date.now(),
