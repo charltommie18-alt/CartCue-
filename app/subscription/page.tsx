@@ -1,62 +1,111 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
+
 import { Capacitor } from "@capacitor/core";
+
 import AmazonIAP from "@/lib/amazon-iap";
+
 import {
   AMAZON_PARENT_SKU,
   AMAZON_SUB_SKU,
   activateAmazonSub,
   getPlanState,
 } from "@/lib/plan";
-import type { PlanState } from "@/lib/plan";
+
+import type {
+  PlanState,
+} from "@/lib/plan";
 
 export default function SubscriptionPage() {
-  const [state, setState] = useState<PlanState | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+
+  const [state, setState] =
+    useState<PlanState | null>(
+      null
+    );
+
+  const [notice, setNotice] =
+    useState<string | null>(
+      null
+    );
+
+  const [busy, setBusy] =
+    useState(false);
 
   useEffect(() => {
-    setState(getPlanState());
+
+    setState(
+      getPlanState()
+    );
+
   }, []);
 
   async function handleAmazonPurchase() {
+
     setNotice(null);
 
-    if (!Capacitor.isNativePlatform()) {
+    if (
+      !Capacitor.isNativePlatform()
+    ) {
+
       setNotice(
         "Amazon subscriptions are purchased inside the Amazon Appstore version of CartCue."
       );
+
       return;
     }
 
     setBusy(true);
 
     try {
-      const result = await AmazonIAP.purchase({
-        sku: AMAZON_SUB_SKU,
-      });
+
+      const result =
+        await AmazonIAP.purchase({
+          sku:
+            AMAZON_SUB_SKU,
+        });
 
       if (!result?.receiptId) {
-        throw new Error("Amazon did not return a purchase receipt.");
+
+        throw new Error(
+          "Amazon did not return a purchase receipt."
+        );
       }
 
       if (!result?.userId) {
-        throw new Error("Amazon did not return the customer ID needed to verify the purchase.");
+
+        throw new Error(
+          "Amazon did not return the customer ID needed to verify the purchase."
+        );
       }
 
-      const parentSku = result.sku || "";
-      const termSku = result.termSku || "";
+      const parentSku =
+        result.sku || "";
+
+      const termSku =
+        result.termSku || "";
 
       const skuMatches =
-        parentSku === AMAZON_PARENT_SKU ||
-        parentSku === AMAZON_SUB_SKU ||
-        termSku === AMAZON_SUB_SKU ||
-        termSku === AMAZON_PARENT_SKU;
+        parentSku ===
+          AMAZON_PARENT_SKU ||
+        parentSku ===
+          AMAZON_SUB_SKU ||
+        termSku ===
+          AMAZON_SUB_SKU ||
+        termSku ===
+          AMAZON_PARENT_SKU;
 
       if (!skuMatches) {
+
         throw new Error(
-          `Unexpected Amazon SKU. Parent: ${parentSku || "none"}, Term: ${termSku || "none"}`
+          `Unexpected Amazon SKU. Parent: ${
+            parentSku || "none"
+          }, Term: ${
+            termSku || "none"
+          }`
         );
       }
 
@@ -68,6 +117,7 @@ export default function SubscriptionPage() {
         );
 
       if (!verification?.active) {
+
         throw new Error(
           verification?.error ||
             "Amazon did not verify an active subscription."
@@ -83,104 +133,140 @@ export default function SubscriptionPage() {
         verification
       );
 
-      setState(getPlanState());
+      setState(
+        getPlanState()
+      );
 
       setNotice(
         "Payment successful. Your CartCue Pro subscription is active."
       );
+
     } catch (error) {
+
       const message =
         error instanceof Error
           ? error.message
           : String(error);
 
-      if (message.toUpperCase().includes("ALREADY_PURCHASED")) {
+      if (
+        message
+          .toUpperCase()
+          .includes(
+            "ALREADY_PURCHASED"
+          )
+      ) {
+
         await restoreAmazonPurchase();
-      } else if (!/cancel/i.test(message)) {
+
+      } else if (
+        !/cancel/i.test(
+          message
+        )
+      ) {
+
         setNotice(
           `Amazon purchase could not be completed: ${message}`
         );
       }
+
     } finally {
+
       setBusy(false);
     }
   }
 
   async function restoreAmazonPurchase() {
+
     setNotice(null);
 
-    if (!Capacitor.isNativePlatform()) {
+    if (
+      !Capacitor.isNativePlatform()
+    ) {
+
       setNotice(
         "Restore is available in the Amazon Appstore version of CartCue."
       );
+
       return;
     }
 
     setBusy(true);
 
     try {
-      const result = await AmazonIAP.restorePurchases();
 
-      const receipts = Array.isArray(result?.receipts)
-        ? result.receipts
-        : [];
+      const result =
+        await AmazonIAP.restorePurchases();
 
-      const activeReceipt = receipts.find((receipt) => {
-        const parentSku = receipt?.sku;
-        const termSku = receipt?.termSku;
+      const receipts =
+        Array.isArray(
+          result?.receipts
+        )
+          ? result.receipts
+          : [];
 
-        const skuMatches =
-          parentSku === AMAZON_PARENT_SKU ||
-          parentSku === AMAZON_SUB_SKU ||
-          termSku === AMAZON_SUB_SKU ||
-          termSku === AMAZON_PARENT_SKU;
+      const activeReceipt =
+        receipts.find(
+          (receipt) =>
+            !receipt?.canceled &&
+            (
+              receipt?.sku ===
+                AMAZON_SUB_SKU ||
+              receipt?.termSku ===
+                AMAZON_SUB_SKU ||
+              receipt?.sku ===
+                "CartCue_monthly_sub" ||
+              receipt?.termSku ===
+                "CartCue_monthly_sub" ||
+              receipt?.termSku ===
+                "CartCue_monthly_sub_term"
+            )
+        );
 
-        return skuMatches && !receipt?.canceled && !!receipt?.receiptId;
-      });
+      if (
+        !activeReceipt?.receiptId ||
+        !result?.userId
+      ) {
 
-      if (!activeReceipt?.receiptId) {
         setNotice(
           "No active CartCue Amazon subscription was found."
         );
-        return;
-      }
 
-      if (!result?.userId) {
-        throw new Error(
-          "Amazon did not return the customer ID needed to restore the subscription."
-        );
+        return;
       }
 
       const verification =
         await AmazonIAP.verifyAmazonReceipt(
           activeReceipt.receiptId,
           result.userId,
-          AMAZON_SUB_SKU
+          activeReceipt.termSku ||
+            activeReceipt.sku ||
+            AMAZON_SUB_SKU
         );
 
       if (!verification?.active) {
+
         setNotice(
-          verification?.error ||
-            "Amazon did not verify an active subscription."
+          "Amazon could not verify an active CartCue subscription."
         );
+
         return;
       }
-
-      await AmazonIAP.fulfillPurchase(
-        activeReceipt.receiptId
-      );
 
       activateAmazonSub(
         activeReceipt.receiptId,
         verification
       );
 
-      setState(getPlanState());
+      setState(
+        getPlanState()
+      );
 
       setNotice(
-        "Your CartCue Pro subscription has been restored."
+        "Your CartCue Pro subscription has been restored and verified by Amazon."
       );
+
     } catch (error) {
+
       const message =
         error instanceof Error
           ? error.message
@@ -189,12 +275,15 @@ export default function SubscriptionPage() {
       setNotice(
         `Could not restore the Amazon subscription: ${message}`
       );
+
     } finally {
+
       setBusy(false);
     }
   }
 
   function handleManageSubscription() {
+
     setNotice(
       "To cancel, open the Amazon Appstore and manage CartCue under your subscriptions. Cancelling there stops future Amazon billing."
     );
@@ -202,11 +291,19 @@ export default function SubscriptionPage() {
 
   return (
     <div className="min-h-screen bg-neutral-100">
+
       <header className="border-b border-neutral-200 bg-white">
+
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
+
           <h1 className="text-xl font-bold text-neutral-900">
-            Cart<span className="text-orange-600">Cue</span>{" "}
+
+            Cart
+            <span className="text-orange-600">
+              Cue
+            </span>{" "}
             Subscription
+
           </h1>
 
           <a
@@ -215,51 +312,79 @@ export default function SubscriptionPage() {
           >
             ← Back to app
           </a>
+
         </div>
+
       </header>
 
       <main className="mx-auto max-w-5xl space-y-6 px-4 py-8">
+
         {state && (
+
           <div className="rounded-xl border border-neutral-200 bg-white p-4 text-sm text-neutral-700 shadow-sm">
+
             <p>
+
               Current plan:{" "}
+
               <span className="font-semibold uppercase">
+
                 {state.plan}
+
               </span>
 
-              {state.plan === "trial" && state.trialEndsAt && (
-                <>
-                  {" "}
-                  · Trial ends{" "}
-                  {new Date(state.trialEndsAt).toLocaleDateString()}
-                </>
-              )}
+              {state.plan ===
+                "trial" &&
+                state.trialEndsAt && (
+                  <>
+                    {" "}
+                    · Trial ends{" "}
+                    {new Date(
+                      state.trialEndsAt
+                    ).toLocaleDateString()}
+                  </>
+                )}
 
-              {state.generationsLeft !== null && (
-                <>
-                  {" "}
-                  · {state.generationsLeft} generations remaining
-                </>
-              )}
+              {state.generationsLeft !==
+                null && (
+                  <>
+                    {" "}
+                    ·{" "}
+                    {
+                      state.generationsLeft
+                    }{" "}
+                    generations remaining
+                  </>
+                )}
 
-              {state.plan === "pro" && (
-                <>
-                  {" "}
-                  · CartCue Pro active
-                </>
-              )}
+              {state.plan ===
+                "pro" && (
+                  <>
+                    {" "}
+                    · CartCue Pro active
+                  </>
+                )}
+
             </p>
+
           </div>
+
         )}
 
         {notice && (
+
           <div className="rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-800 shadow-sm">
+
             {notice}
+
           </div>
+
         )}
 
         <div className="grid gap-6 md:grid-cols-3">
+
           <div className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
+
             <h2 className="font-semibold text-neutral-900">
               Starter
             </h2>
@@ -284,9 +409,11 @@ export default function SubscriptionPage() {
             <p className="mt-2 text-center text-[11px] text-neutral-500">
               Your 7-day Pro trial starts automatically.
             </p>
+
           </div>
 
           <div className="rounded-xl border-2 border-orange-600 bg-white p-6 shadow-md">
+
             <p className="text-xs font-semibold uppercase text-orange-600">
               Most popular
             </p>
@@ -296,10 +423,13 @@ export default function SubscriptionPage() {
             </h2>
 
             <p className="mt-1 text-3xl font-bold text-neutral-900">
+
               $4.99
+
               <span className="text-sm font-normal text-neutral-500">
                 /mo
               </span>
+
             </p>
 
             <ul className="mt-4 space-y-2 text-sm text-neutral-600">
@@ -310,17 +440,25 @@ export default function SubscriptionPage() {
             </ul>
 
             <button
-              onClick={handleAmazonPurchase}
+              type="button"
+              onClick={
+                handleAmazonPurchase
+              }
               disabled={busy}
               className="mt-6 w-full rounded-md bg-amber-400 px-4 py-2.5 text-sm font-semibold text-neutral-900 hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
+
               {busy
                 ? "Processing Amazon payment…"
                 : "Subscribe with Amazon — $4.99/mo"}
+
             </button>
 
             <button
-              onClick={restoreAmazonPurchase}
+              type="button"
+              onClick={
+                restoreAmazonPurchase
+              }
               disabled={busy}
               className="mt-2 w-full rounded-md px-4 py-2 text-xs font-medium text-neutral-600 hover:bg-neutral-100 disabled:opacity-50"
             >
@@ -328,7 +466,10 @@ export default function SubscriptionPage() {
             </button>
 
             <button
-              onClick={handleManageSubscription}
+              type="button"
+              onClick={
+                handleManageSubscription
+              }
               className="mt-2 w-full rounded-md border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50"
             >
               Manage / Cancel Subscription
@@ -337,9 +478,11 @@ export default function SubscriptionPage() {
             <p className="mt-3 text-center font-mono text-[11px] text-neutral-400">
               SKU: {AMAZON_SUB_SKU}
             </p>
+
           </div>
 
           <div className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm opacity-80">
+
             <h2 className="font-semibold text-neutral-900">
               Agency
             </h2>
@@ -361,10 +504,13 @@ export default function SubscriptionPage() {
             <p className="mt-6 rounded-md border border-neutral-200 px-4 py-2.5 text-center text-sm text-neutral-500">
               Coming soon
             </p>
+
           </div>
+
         </div>
 
         <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-center text-xs text-neutral-600">
+
           <p className="font-semibold">
             7-day free trial
           </p>
@@ -378,8 +524,11 @@ export default function SubscriptionPage() {
             You can manage or cancel your subscription through your Amazon
             Appstore subscription management.
           </p>
+
         </div>
+
       </main>
+
     </div>
   );
-}
+        }
