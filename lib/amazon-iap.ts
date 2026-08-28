@@ -53,7 +53,9 @@ interface AmazonIAPPlugin {
 
   fulfillPurchase(options: {
     receiptId: string;
-    result?: "FULFILLED" | "UNAVAILABLE";
+    result?:
+      | "FULFILLED"
+      | "UNAVAILABLE";
   }): Promise<{
     success: boolean;
   }>;
@@ -88,12 +90,14 @@ export async function purchase(
     AMAZON_SUBSCRIPTION_SKU;
 
   if (
-    typeof input === "string"
+    typeof input ===
+    "string"
   ) {
     sku = input;
   } else if (
     input &&
-    typeof input.sku === "string"
+    typeof input.sku ===
+      "string"
   ) {
     sku = input.sku;
   }
@@ -136,9 +140,13 @@ export async function purchase(
 
   return {
     ...result,
+
     sku:
-      result.sku || sku,
+      result.sku ||
+      sku,
+
     userId,
+
     marketplace,
   };
 }
@@ -166,15 +174,18 @@ export async function fulfillPurchase(
 ) {
   ensureAmazonAndroid();
 
-  if (!receiptId) {
+  if (!receiptId.trim()) {
     throw new Error(
       "Missing Amazon receipt ID."
     );
   }
 
   return AmazonIAPNative.fulfillPurchase({
-    receiptId,
-    result: "FULFILLED",
+    receiptId:
+      receiptId.trim(),
+
+    result:
+      "FULFILLED",
   });
 }
 
@@ -184,13 +195,14 @@ export async function verifyAmazonReceipt(
   sku: string =
     AMAZON_SUBSCRIPTION_SKU
 ) {
-  if (!receiptId) {
+
+  if (!receiptId.trim()) {
     throw new Error(
       "Missing Amazon receipt ID."
     );
   }
 
-  if (!userId) {
+  if (!userId.trim()) {
     throw new Error(
       "Missing Amazon user ID."
     );
@@ -201,21 +213,35 @@ export async function verifyAmazonReceipt(
       "/api/amazon/verify",
       {
         method: "POST",
+
         headers: {
           "Content-Type":
             "application/json",
         },
+
         cache: "no-store",
+
         body: JSON.stringify({
-          receiptId,
-          userId,
-          sku,
+          receiptId:
+            receiptId.trim(),
+
+          userId:
+            userId.trim(),
+
+          sku:
+            sku.trim(),
         }),
       }
     );
 
-  const data =
-    await response.json();
+  let data: any = null;
+
+  try {
+    data =
+      await response.json();
+  } catch {
+    data = null;
+  }
 
   if (!response.ok) {
     throw new Error(
@@ -228,7 +254,6 @@ export async function verifyAmazonReceipt(
 }
 
 export async function subscribeToCartCue() {
-  ensureAmazonAndroid();
 
   const result =
     await purchase({
@@ -275,12 +300,18 @@ export async function subscribeToCartCue() {
 
 const AmazonIAP = {
   purchase,
+
   subscribeToCartCue,
+
   restorePurchases,
+
   syncPurchases,
+
   getUserData:
     getAmazonUserData,
+
   fulfillPurchase,
+
   verifyAmazonReceipt,
 };
 
