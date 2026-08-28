@@ -5,7 +5,6 @@ export const AMAZON_SUB_SKU =
   "CartCue_monthly_term";
 
 const TRIAL_DAYS = 7;
-
 const TRIAL_GENERATIONS = 10;
 
 export type PlanState = {
@@ -45,7 +44,12 @@ export type StoredSubscription = {
   freeTrialEndDate:
     number | null;
 
-  gracePeriodEndDate:
+  /*
+   * Optional because older saved
+   * subscription records may not
+   * contain this property.
+   */
+  gracePeriodEndDate?:
     number | null;
 
   receiptId:
@@ -66,7 +70,6 @@ function getStoredSubscription():
   }
 
   try {
-
     const raw =
       localStorage.getItem(
         "cartcue_amazon_subscription"
@@ -81,7 +84,6 @@ function getStoredSubscription():
     ) as StoredSubscription;
 
   } catch {
-
     return null;
   }
 }
@@ -90,7 +92,6 @@ export function saveAmazonSubscription(
   subscription:
     StoredSubscription
 ) {
-
   if (
     typeof window ===
     "undefined"
@@ -108,14 +109,11 @@ export function saveAmazonSubscription(
   if (
     subscription.active
   ) {
-
     localStorage.setItem(
       "cartcue_pro",
       "true"
     );
-
   } else {
-
     localStorage.removeItem(
       "cartcue_pro"
     );
@@ -123,7 +121,6 @@ export function saveAmazonSubscription(
 }
 
 export function clearAmazonSubscription() {
-
   if (
     typeof window ===
     "undefined"
@@ -141,12 +138,10 @@ export function clearAmazonSubscription() {
 }
 
 function getLocalTrial() {
-
   if (
     typeof window ===
     "undefined"
   ) {
-
     return {
       plan:
         "trial" as const,
@@ -165,7 +160,6 @@ function getLocalTrial() {
     );
 
   if (!start) {
-
     start =
       new Date().toISOString();
 
@@ -194,7 +188,6 @@ function getLocalTrial() {
   if (
     Date.now() >= end
   ) {
-
     return {
       plan:
         "free" as const,
@@ -231,7 +224,6 @@ function isSubscriptionActive(
   subscription:
     StoredSubscription
 ) {
-
   if (
     !subscription.active
   ) {
@@ -277,7 +269,6 @@ export function getPlanState():
     typeof window ===
     "undefined"
   ) {
-
     return {
       plan:
         "trial",
@@ -308,7 +299,6 @@ export function getPlanState():
       subscription
     )
   ) {
-
     const endDates = [
       subscription.cancelDate,
       subscription.renewalDate,
@@ -388,7 +378,6 @@ export function getPlanState():
 }
 
 export function getTrialTimeLeft() {
-
   const state =
     getPlanState();
 
@@ -397,7 +386,6 @@ export function getTrialTimeLeft() {
       "trial" ||
     !state.trialEndsAt
   ) {
-
     return {
       hours: 0,
 
@@ -418,7 +406,6 @@ export function getTrialTimeLeft() {
   if (
     difference <= 0
   ) {
-
     return {
       hours: 0,
 
@@ -447,7 +434,6 @@ export function getTrialTimeLeft() {
 }
 
 export function consumeGeneration() {
-
   if (
     typeof window ===
     "undefined"
@@ -472,7 +458,6 @@ export function consumeGeneration() {
 }
 
 export function activatePro() {
-
   if (
     typeof window ===
     "undefined"
@@ -487,7 +472,6 @@ export function activatePro() {
 }
 
 export function resetTrial() {
-
   if (
     typeof window ===
     "undefined"
@@ -535,7 +519,6 @@ export function activateAmazonSub(
       number | null;
   }
 ) {
-
   if (
     typeof window ===
     "undefined"
@@ -546,14 +529,12 @@ export function activateAmazonSub(
   if (
     !verification.active
   ) {
-
     clearAmazonSubscription();
 
     return;
   }
 
   saveAmazonSubscription({
-
     active: true,
 
     autoRenewing:
@@ -583,4 +564,4 @@ export function activateAmazonSub(
     verifiedAt:
       Date.now(),
   });
-}
+    }
