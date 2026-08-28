@@ -5,6 +5,7 @@ export const AMAZON_SUB_SKU =
   "CartCue_monthly_term";
 
 const TRIAL_DAYS = 7;
+
 const TRIAL_GENERATIONS = 10;
 
 export type PlanState = {
@@ -13,7 +14,8 @@ export type PlanState = {
     | "free"
     | "pro";
 
-  trialEndsAt: string | null;
+  trialEndsAt:
+    string | null;
 
   generationsLeft:
     number | null;
@@ -239,11 +241,7 @@ function isSubscriptionActive(
   const now =
     Date.now();
 
-  /*
-   * If Amazon supplied an actual end date,
-   * respect it.
-   */
-  const dates = [
+  const endDates = [
     subscription.cancelDate,
     subscription.renewalDate,
     subscription.gracePeriodEndDate,
@@ -258,19 +256,18 @@ function isSubscriptionActive(
   );
 
   if (
-    dates.length === 0
+    endDates.length ===
+    0
   ) {
     return true;
   }
 
-  /*
-   * Use the latest future date as the
-   * customer's access boundary.
-   */
-  const latest =
-    Math.max(...dates);
+  const latestEnd =
+    Math.max(
+      ...endDates
+    );
 
-  return latest > now;
+  return latestEnd > now;
 }
 
 export function getPlanState():
@@ -312,7 +309,7 @@ export function getPlanState():
     )
   ) {
 
-    const dates = [
+    const endDates = [
       subscription.cancelDate,
       subscription.renewalDate,
       subscription.gracePeriodEndDate,
@@ -327,8 +324,10 @@ export function getPlanState():
     );
 
     const end =
-      dates.length
-        ? Math.max(...dates)
+      endDates.length
+        ? Math.max(
+            ...endDates
+          )
         : null;
 
     return {
@@ -360,9 +359,7 @@ export function getPlanState():
     };
   }
 
-  if (
-    subscription
-  ) {
+  if (subscription) {
     clearAmazonSubscription();
   }
 
@@ -403,7 +400,9 @@ export function getTrialTimeLeft() {
 
     return {
       hours: 0,
+
       minutes: 0,
+
       expired:
         state.plan ===
         "free",
@@ -422,7 +421,9 @@ export function getTrialTimeLeft() {
 
     return {
       hours: 0,
+
       minutes: 0,
+
       expired: true,
     };
   }
@@ -512,7 +513,8 @@ export function resetTrial() {
 }
 
 export function activateAmazonSub(
-  receiptId: string | null,
+  receiptId:
+    string | null,
 
   verification: {
     active: boolean;
@@ -546,6 +548,7 @@ export function activateAmazonSub(
   ) {
 
     clearAmazonSubscription();
+
     return;
   }
 
@@ -580,4 +583,4 @@ export function activateAmazonSub(
     verifiedAt:
       Date.now(),
   });
-    }
+}
