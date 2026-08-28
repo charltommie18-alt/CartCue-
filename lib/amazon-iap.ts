@@ -64,7 +64,7 @@ const AmazonIAPNative =
     "AmazonIAP"
   );
 
-function ensureAndroid() {
+function ensureAmazonAndroid() {
   if (
     Capacitor.getPlatform() !==
     "android"
@@ -82,7 +82,7 @@ export async function purchase(
         sku: string;
       }
 ) {
-  ensureAndroid();
+  ensureAmazonAndroid();
 
   let sku =
     AMAZON_SUBSCRIPTION_SKU;
@@ -98,7 +98,7 @@ export async function purchase(
     sku = input.sku;
   }
 
-  if (!sku) {
+  if (!sku.trim()) {
     throw new Error(
       "Amazon subscription SKU is missing."
     );
@@ -106,7 +106,7 @@ export async function purchase(
 
   const result =
     await AmazonIAPNative.purchase({
-      sku,
+      sku: sku.trim(),
     });
 
   if (!result?.success) {
@@ -122,6 +122,7 @@ export async function purchase(
     result.marketplace;
 
   if (!userId) {
+
     const userData =
       await AmazonIAPNative.getUserData();
 
@@ -135,30 +136,27 @@ export async function purchase(
 
   return {
     ...result,
-
     sku:
       result.sku || sku,
-
     userId,
-
     marketplace,
   };
 }
 
 export async function getAmazonUserData() {
-  ensureAndroid();
+  ensureAmazonAndroid();
 
   return AmazonIAPNative.getUserData();
 }
 
 export async function restorePurchases() {
-  ensureAndroid();
+  ensureAmazonAndroid();
 
   return AmazonIAPNative.restorePurchases();
 }
 
 export async function syncPurchases() {
-  ensureAndroid();
+  ensureAmazonAndroid();
 
   return AmazonIAPNative.syncPurchases();
 }
@@ -166,7 +164,7 @@ export async function syncPurchases() {
 export async function fulfillPurchase(
   receiptId: string
 ) {
-  ensureAndroid();
+  ensureAmazonAndroid();
 
   if (!receiptId) {
     throw new Error(
@@ -174,12 +172,10 @@ export async function fulfillPurchase(
     );
   }
 
-  return AmazonIAPNative.fulfillPurchase(
-    {
-      receiptId,
-      result: "FULFILLED",
-    }
-  );
+  return AmazonIAPNative.fulfillPurchase({
+    receiptId,
+    result: "FULFILLED",
+  });
 }
 
 export async function verifyAmazonReceipt(
@@ -205,14 +201,11 @@ export async function verifyAmazonReceipt(
       "/api/amazon/verify",
       {
         method: "POST",
-
         headers: {
           "Content-Type":
             "application/json",
         },
-
         cache: "no-store",
-
         body: JSON.stringify({
           receiptId,
           userId,
@@ -235,25 +228,21 @@ export async function verifyAmazonReceipt(
 }
 
 export async function subscribeToCartCue() {
-  ensureAndroid();
+  ensureAmazonAndroid();
 
-  const purchaseResult =
+  const result =
     await purchase({
       sku:
         AMAZON_SUBSCRIPTION_SKU,
     });
 
-  if (
-    !purchaseResult.receiptId
-  ) {
+  if (!result.receiptId) {
     throw new Error(
       "Amazon did not return a receipt ID."
     );
   }
 
-  if (
-    !purchaseResult.userId
-  ) {
+  if (!result.userId) {
     throw new Error(
       "Amazon did not return a user ID."
     );
@@ -261,14 +250,12 @@ export async function subscribeToCartCue() {
 
   const verification =
     await verifyAmazonReceipt(
-      purchaseResult.receiptId,
-      purchaseResult.userId,
+      result.receiptId,
+      result.userId,
       AMAZON_SUBSCRIPTION_SKU
     );
 
-  if (
-    !verification?.active
-  ) {
+  if (!verification?.active) {
     throw new Error(
       verification?.error ||
         "Amazon verification did not confirm an active subscription."
@@ -276,11 +263,11 @@ export async function subscribeToCartCue() {
   }
 
   await fulfillPurchase(
-    purchaseResult.receiptId
+    result.receiptId
   );
 
   return {
-    ...purchaseResult,
+    ...result,
     verification,
     active: true,
   };
