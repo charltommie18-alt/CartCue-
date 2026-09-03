@@ -8,56 +8,30 @@ import com.getcapacitor.BridgeActivity;
 import java.util.HashSet;
 import java.util.Set;
 
-public class MainActivity
-        extends BridgeActivity {
+public class MainActivity extends BridgeActivity {
 
     @Override
-    public void onCreate(
-            Bundle savedInstanceState
-    ) {
-
-        registerPlugin(
-                AmazonIAPPlugin.class
-        );
-
-        super.onCreate(
-                savedInstanceState
-        );
+    public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(AmazonIAPPlugin.class);
+        super.onCreate(savedInstanceState);
     }
 
     @Override
     public void onResume() {
-
         super.onResume();
 
         try {
-
             PurchasingService.getUserData();
 
-            Set<String> productSkus =
-                    new HashSet<>();
+            Set<String> productSkus = new HashSet<>();
+            // Parent + term must both be registered
+            productSkus.add("CartCue_monthly_sub");
+            productSkus.add("CartCue_monthly_term");
 
-            productSkus.add(
-                    "CartCue_monthly_sub"
-            );
-
-            productSkus.add(
-                    "CartCue_monthly_term"
-            );
-
-            PurchasingService.getProductData(
-                    productSkus
-            );
-
-            PurchasingService.getPurchaseUpdates(
-                    false
-            );
-
+            PurchasingService.getProductData(productSkus);
+            PurchasingService.getPurchaseUpdates(false);
         } catch (Exception ignored) {
-            /*
-             * Amazon Appstore may not be available
-             * outside the Amazon Appstore environment.
-             */
+            // Amazon Appstore may not be present outside App Tester / store builds
         }
     }
-        }
+}
