@@ -1,0 +1,13 @@
+{
+  "app": "CartCue",
+  "subscription": {
+    "parentSku": "CartCue_monthly_sub",
+    "termSku": "CartCue_monthly_term",
+    "title": "CartCue Pro Monthly",
+    "description": "CartCue Pro monthly subscription with a 7-day free trial.",
+    "term": "Monthly",
+    "priceUsd": 4.99,
+    "freeTrialDays": 7,
+    "autoRenew": true
+  }
+}
