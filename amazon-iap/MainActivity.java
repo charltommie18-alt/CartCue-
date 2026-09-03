@@ -11,7 +11,7 @@ import java.util.Set;
 public class MainActivity extends BridgeActivity {
 
     @Override
-    public void onCreate(Bundle savedInstanceState) {
+    public void onCreate(Bundle savedInstanceedInstanceState) {
         registerPlugin(AmazonIAPPlugin.class);
         super.onCreate(savedInstanceState);
     }
@@ -24,7 +24,6 @@ public class MainActivity extends BridgeActivity {
             PurchasingService.getUserData();
 
             Set<String> productSkus = new HashSet<>();
-            // Parent + term must both be registered
             productSkus.add("CartCue_monthly_sub");
             productSkus.add("CartCue_monthly_term");
 
