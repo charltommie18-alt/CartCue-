@@ -11,7 +11,7 @@ import java.util.Set;
 public class MainActivity extends BridgeActivity {
 
     @Override
-    public void onCreate(Bundle savedInstanceedInstanceState) {
+    public void onCreate(Bundle savedInstanceState) {
         registerPlugin(AmazonIAPPlugin.class);
         super.onCreate(savedInstanceState);
     }
