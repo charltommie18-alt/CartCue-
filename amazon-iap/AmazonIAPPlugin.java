@@ -621,5 +621,5 @@ public class AmazonIAPPlugin
         updatesCall = null;
 
         call.resolve(data);
-    }
-    }
+}
+}
