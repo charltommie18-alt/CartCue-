@@ -177,7 +177,7 @@ export async function verifyAmazonReceipt(
 }
 
 /**
- * Full subscribe flow used by the modal and any standalone button:
+ * Full subscribe flow:
  * purchase → verify with Amazon RVS → fulfill → return active state.
  */
 export async function subscribeToCartCue() {
