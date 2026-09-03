@@ -46,7 +46,6 @@ export default function SubscribeModal({
           ? e.message
           : "Unable to start the Amazon subscription.";
 
-      // User cancelled Amazon dialog — keep silent
       if (!/cancel/i.test(message)) {
         setError(message);
       }
