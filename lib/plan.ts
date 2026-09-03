@@ -87,7 +87,6 @@ function isSubscriptionActive(subscription: StoredSubscription): boolean {
     (value): value is number => typeof value === "number" && value > 0
   );
 
-  // No end dates → treat as active (Amazon still owns the truth via RVS)
   if (endDates.length === 0) {
     return true;
   }
