@@ -1,31 +1,23 @@
 "use client";
 
 import { useState } from "react";
-
 import AmazonIAP from "@/lib/amazon-iap";
-
-import {
-  saveAmazonSubscription,
-} from "@/lib/plan";
+import { saveAmazonSubscription } from "@/lib/plan";
 
 export default function SubscribeModal({
   onClose,
 }: {
   onClose: () => void;
 }) {
-  const [loading, setLoading] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function subscribe() {
     setLoading(true);
     setError("");
 
     try {
-      const result =
-        await AmazonIAP.subscribeToCartCue();
+      const result = await AmazonIAP.subscribeToCartCue();
 
       if (!result?.active) {
         throw new Error(
@@ -37,27 +29,27 @@ export default function SubscribeModal({
         active: true,
         autoRenewing:
           result.verification?.autoRenewing !== false,
-        renewalDate:
-          result.verification?.renewalDate ||
-          null,
-        cancelDate:
-          result.verification?.cancelDate ||
-          null,
+        renewalDate: result.verification?.renewalDate || null,
+        cancelDate: result.verification?.cancelDate || null,
         freeTrialEndDate:
-          result.verification?.freeTrialEndDate ||
-          null,
-        receiptId:
-          result.receiptId ||
-          null,
+          result.verification?.freeTrialEndDate || null,
+        gracePeriodEndDate:
+          result.verification?.gracePeriodEndDate || null,
+        receiptId: result.receiptId || null,
         verifiedAt: Date.now(),
       });
 
       window.location.href = "/";
-    } catch (e: any) {
-      setError(
-        e?.message ||
-          "Unable to start the Amazon subscription."
-      );
+    } catch (e: unknown) {
+      const message =
+        e instanceof Error
+          ? e.message
+          : "Unable to start the Amazon subscription.";
+
+      // User cancelled Amazon dialog — keep silent
+      if (!/cancel/i.test(message)) {
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -66,7 +58,6 @@ export default function SubscribeModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-sm rounded-3xl bg-white p-6 text-center">
-
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-orange-100 text-xl">
           ⭐
         </div>
@@ -76,8 +67,8 @@ export default function SubscribeModal({
         </h2>
 
         <p className="mt-2 text-sm text-neutral-500">
-          Continue with CartCue Pro and get
-          unlimited Amazon product kits.
+          Continue with CartCue Pro and get unlimited Amazon product
+          kits. Payment is handled by the Amazon Appstore.
         </p>
 
         <div className="mt-5 rounded-xl bg-neutral-50 p-4 text-left text-sm">
@@ -86,7 +77,7 @@ export default function SubscribeModal({
           <p>✓ Amazon affiliate links</p>
           <p>✓ $4.99/month via Amazon</p>
           <p className="mt-2 font-bold text-orange-600">
-            ✓ 7-day free trial
+            ✓ 7-day free trial (when configured on Amazon)
           </p>
         </div>
 
@@ -96,9 +87,7 @@ export default function SubscribeModal({
           disabled={loading}
           className="mt-5 block w-full rounded-full bg-orange-500 py-3.5 font-bold text-white disabled:opacity-50"
         >
-          {loading
-            ? "Connecting to Amazon..."
-            : "Start 7-Day Free Trial"}
+          {loading ? "Connecting to Amazon…" : "Start 7-Day Free Trial"}
         </button>
 
         {error && (
@@ -108,6 +97,7 @@ export default function SubscribeModal({
         )}
 
         <button
+          type="button"
           onClick={onClose}
           disabled={loading}
           className="mt-3 text-sm text-neutral-400"
@@ -117,4 +107,4 @@ export default function SubscribeModal({
       </div>
     </div>
   );
-          }
+}
