@@ -1,0 +1,11 @@
+{
+  "CartCue_monthly_term": {
+    "itemType": "SUBSCRIPTION",
+    "price": 4.99,
+    "title": "CartCue Pro Monthly",
+    "description": "CartCue Pro monthly subscription with a 7-day free trial.",
+    "subscriptionParent": "CartCue_monthly_sub",
+    "term": "Monthly",
+    "freeTrialPeriod": "Weekly"
+  }
+}
