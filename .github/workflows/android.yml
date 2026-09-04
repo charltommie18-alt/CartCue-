@@ -35,11 +35,31 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Install Amazon Appstore SDK
+      # NO manual JAR upload needed.
+      # Official Amazon Appstore SDK is downloaded from Maven Central.
+      - name: Download Amazon Appstore SDK from Maven Central
         run: |
           mkdir -p android/app/libs
-          cp amazon-iap/amazon-appstore-sdk-3.0.9.jar \
-            android/app/libs/amazon-appstore-sdk-3.0.9.jar
+          curl -fsSL \
+            "https://repo1.maven.org/maven2/com/amazon/device/amazon-appstore-sdk/3.0.9/amazon-appstore-sdk-3.0.9.jar" \
+            -o android/app/libs/amazon-appstore-sdk-3.0.9.jar
+
+          python3 - <<'PY'
+          import pathlib, zipfile, sys
+          p = pathlib.Path("android/app/libs/amazon-appstore-sdk-3.0.9.jar")
+          print("Downloaded size:", p.stat().st_size)
+          if p.stat().st_size < 100000:
+              print("ERROR: download too small")
+              sys.exit(1)
+          if not zipfile.is_zipfile(p):
+              print("ERROR: not a valid JAR")
+              sys.exit(1)
+          names = zipfile.ZipFile(p).namelist()
+          if not any("PurchasingService" in n for n in names):
+              print("ERROR: PurchasingService missing")
+              sys.exit(1)
+          print("Amazon Appstore SDK 3.0.9 OK")
+          PY
 
       - name: Install Amazon authentication key
         run: |
@@ -62,40 +82,28 @@ jobs:
         run: |
           BUILD_GRADLE="android/app/build.gradle"
 
-          if ! grep -q \
-            "amazon-appstore-sdk-3.0.9.jar" \
-            "$BUILD_GRADLE"
-          then
-            python3 - <<'PY'
-from pathlib import Path
+          python3 - <<'PY'
+          from pathlib import Path
 
-path = Path("android/app/build.gradle")
-text = path.read_text()
+          path = Path("android/app/build.gradle")
+          text = path.read_text()
 
-needle = "dependencies {"
+          # Prefer official Maven coordinate; also keep local jar as fallback.
+          dep_maven = "    implementation 'com.amazon.device:amazon-appstore-sdk:3.0.9'"
+          dep_files = "    implementation files('libs/amazon-appstore-sdk-3.0.9.jar')"
 
-if needle not in text:
-    raise SystemExit(
-        "Could not find dependencies block."
-    )
+          if "com.amazon.device:amazon-appstore-sdk" not in text:
+              if "dependencies {" not in text:
+                  raise SystemExit("Could not find dependencies block.")
+              text = text.replace(
+                  "dependencies {",
+                  "dependencies {\n" + dep_maven + "\n" + dep_files,
+                  1,
+              )
+              path.write_text(text)
 
-replacement = (
-    needle
-    + "\n"
-    + "    implementation files('libs/amazon-appstore-sdk-3.0.9.jar')"
-)
-
-text = text.replace(
-    needle,
-    replacement,
-    1
-)
-
-path.write_text(text)
-PY
-          fi
-
-          cat "$BUILD_GRADLE"
+          print(path.read_text())
+          PY
 
       - name: Patch Android manifest for Amazon IAP
         shell: bash
@@ -103,58 +111,54 @@ PY
           MANIFEST="android/app/src/main/AndroidManifest.xml"
 
           python3 - <<'PY'
-from pathlib import Path
+          from pathlib import Path
 
-path = Path(
-    "android/app/src/main/AndroidManifest.xml"
-)
+          path = Path("android/app/src/main/AndroidManifest.xml")
+          text = path.read_text()
 
-text = path.read_text()
+          permission = (
+              '<uses-permission '
+              'android:name="com.amazon.inapp.purchasing.Permission.NOTIFY" />'
+          )
 
-permission = (
-    '<uses-permission '
-    'android:name="com.amazon.inapp.purchasing.Permission.NOTIFY" />'
-)
+          queries = """<queries>
+                  <package android:name="com.amazon.venezia" />
+              </queries>"""
 
-queries = """<queries>
-        <package android:name="com.amazon.venezia" />
-    </queries>"""
+          receiver = """<receiver
+                  android:name="com.amazon.device.iap.ResponseReceiver"
+                  android:exported="true"
+                  android:permission="com.amazon.inapp.purchasing.Permission.NOTIFY">
+                  <intent-filter>
+                      <action
+                          android:name="com.amazon.inapp.purchasing.NOTIFY" />
+                  </intent-filter>
+              </receiver>"""
 
-receiver = """<receiver
-        android:name="com.amazon.device.iap.ResponseReceiver"
-        android:exported="true"
-        android:permission="com.amazon.inapp.purchasing.Permission.NOTIFY">
-        <intent-filter>
-            <action
-                android:name="com.amazon.inapp.purchasing.NOTIFY" />
-        </intent-filter>
-    </receiver>"""
+          if permission not in text:
+              text = text.replace(
+                  "<application",
+                  permission + "\n\n    <application",
+                  1,
+              )
 
-if permission not in text:
-    text = text.replace(
-        "<application",
-        permission + "\n\n    <application",
-        1
-    )
+          if 'package android:name="com.amazon.venezia"' not in text:
+              text = text.replace(
+                  "<application",
+                  queries + "\n\n    <application",
+                  1,
+              )
 
-if "<package android:name=\"com.amazon.venezia\"" not in text:
-    text = text.replace(
-        "<application",
-        queries + "\n\n    <application",
-        1
-    )
+          if "com.amazon.device.iap.ResponseReceiver" not in text:
+              text = text.replace(
+                  "</application>",
+                  "    " + receiver + "\n\n    </application>",
+                  1,
+              )
 
-if "com.amazon.device.iap.ResponseReceiver" not in text:
-    text = text.replace(
-        "</application>",
-        "    " + receiver + "\n\n    </application>",
-        1
-    )
-
-path.write_text(text)
-PY
-
-          cat "$MANIFEST"
+          path.write_text(text)
+          print(path.read_text())
+          PY
 
       - name: Check Amazon files
         run: |
