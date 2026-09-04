@@ -27,36 +27,32 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # Non-interactive install only. Do not run tools that prompt for input.
       - name: Install dependencies
-        run: |
-          npm install --no-fund --no-audit
+        run: npm install --no-fund --no-audit
 
-      # App loads from https://cartcue-8eb4.onrender.com (capacitor server.url).
-      # Full Next export is not required to produce the Android shell APK.
-      # Keep a minimal webDir so Capacitor sync succeeds.
+      # App uses capacitor server.url (Render). Minimal webDir is enough for the shell APK.
       - name: Prepare webDir for Capacitor
         run: |
           mkdir -p public
-          if [ ! -f public/index.html ]; then
-            cat > public/index.html << 'HTML'
-          <!DOCTYPE html>
-          <html lang="en">
+          python3 -c "
+          from pathlib import Path
+          p = Path('public/index.html')
+          if not p.exists():
+              p.write_text('''<!DOCTYPE html>
+          <html lang=\"en\">
           <head>
-            <meta charset="utf-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <meta charset=\"utf-8\" />
+            <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
             <title>CartCue</title>
-            <script>
-              // Capacitor loads the live app from server.url in capacitor.config.ts
-              location.replace("https://cartcue-8eb4.onrender.com/");
-            </script>
+            <script>location.replace(\"https://cartcue-8eb4.onrender.com/\");</script>
           </head>
-          <body>
-            <p>Loading CartCue…</p>
-          </body>
+          <body><p>Loading CartCue…</p></body>
           </html>
-          HTML
-          fi
+          ''')
+              print('wrote public/index.html')
+          else:
+              print('public/index.html already exists')
+          "
 
       - name: Add Capacitor Android platform
         run: |
@@ -99,7 +95,7 @@ jobs:
                   raise SystemExit('Could not find dependencies block.')
               text = text.replace('dependencies {', 'dependencies {\n' + dep_maven + '\n' + dep_files, 1)
               path.write_text(text)
-          print(path.read_text())
+          print('gradle deps updated')
           "
 
       - name: Patch Android manifest for Amazon IAP
@@ -127,7 +123,7 @@ jobs:
           if 'com.amazon.device.iap.ResponseReceiver' not in text:
               text = text.replace('</application>', '    ' + receiver + '\n\n    </application>', 1)
           path.write_text(text)
-          print('Manifest patched')
+          print('manifest patched')
           "
 
       - name: Check Amazon files
