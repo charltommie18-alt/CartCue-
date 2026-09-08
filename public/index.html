@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CartCue</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 24px;
+           background: #f5f5f5; color: #111; }
+    .card { max-width: 420px; margin: 40px auto; background: #fff;
+            border-radius: 16px; padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+    h1 { margin: 0 0 8px; font-size: 22px; }
+    p { color: #555; line-height: 1.5; }
+    a.button, button {
+      display: inline-block; margin-top: 16px; padding: 12px 18px;
+      background: #ea580c; color: #fff; border: 0; border-radius: 10px;
+      font-weight: 700; text-decoration: none; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>CartCue</h1>
+    <p>Turn Amazon products into Instagram-ready content kits.</p>
+    <p id="status">Connecting…</p>
+    <p>
+      <a class="button" href="https://cartcue-8eb4.onrender.com/">Open CartCue</a>
+    </p>
+    <button type="button" onclick="location.href='https://cartcue-8eb4.onrender.com/'">
+      Retry
+    </button>
+  </div>
+  <script>
+    // Try to load the live app; keep this page if it fails
+    fetch("https://cartcue-8eb4.onrender.com/", { mode: "no-cors", cache: "no-store" })
+      .then(function () {
+        document.getElementById("status").textContent = "Ready. Tap Open CartCue to continue.";
+        // Optional auto-redirect when online:
+        // location.replace("https://cartcue-8eb4.onrender.com/");
+      })
+      .catch(function () {
+        document.getElementById("status").textContent =
+          "Could not reach the server. Check your connection, then tap Retry.";
+      });
+  </script>
+</body>
+</html>
