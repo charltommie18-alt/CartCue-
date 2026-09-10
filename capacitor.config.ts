@@ -5,9 +5,9 @@ const config: CapacitorConfig = {
   appName: "CartCue",
   webDir: "public",
   server: {
-    url: "https://YOUR-VERCEL-URL.vercel.app",  // new URL
-    cleartext: false,
-  },
+  url: "https://cart-cue.vercel.app",
+  cleartext: false,
+},
 };
 
 export default config;
