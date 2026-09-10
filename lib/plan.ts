@@ -9,6 +9,17 @@ export const AMAZON_SUBSCRIPTION_SKU = AMAZON_SUB_SKU;
 const TRIAL_DAYS = 7;
 const TRIAL_GENERATIONS = 10;
 
+/**
+ * Owner accounts — always free / Pro, no Amazon payment required.
+ * Normalized to lowercase for comparison.
+ */
+export const OWNER_EMAILS = [
+  "charltommie18@gmail.com",
+];
+
+const OWNER_EMAIL_KEY = "cartcue_owner_email";
+const OWNER_PRO_KEY = "cartcue_owner_pro";
+
 export type PlanState = {
   plan: "trial" | "free" | "pro";
   trialEndsAt: string | null;
@@ -28,6 +39,47 @@ export type StoredSubscription = {
   receiptId: string | null;
   verifiedAt: number;
 };
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+export function isOwnerEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const n = normalizeEmail(email);
+  return OWNER_EMAILS.some((e) => normalizeEmail(e) === n);
+}
+
+/** Activate permanent free Pro for a whitelisted owner email. */
+export function unlockOwnerPro(email: string): boolean {
+  if (typeof window === "undefined") return false;
+  if (!isOwnerEmail(email)) return false;
+
+  localStorage.setItem(OWNER_EMAIL_KEY, normalizeEmail(email));
+  localStorage.setItem(OWNER_PRO_KEY, "true");
+  localStorage.setItem("cartcue_pro", "true");
+  return true;
+}
+
+export function isOwnerUnlocked(): boolean {
+  if (typeof window === "undefined") return false;
+
+  const flag = localStorage.getItem(OWNER_PRO_KEY) === "true";
+  const email = localStorage.getItem(OWNER_EMAIL_KEY);
+
+  if (flag && isOwnerEmail(email)) {
+    return true;
+  }
+
+  // Also accept direct pro flag set with owner email stored
+  if (isOwnerEmail(email)) {
+    localStorage.setItem(OWNER_PRO_KEY, "true");
+    localStorage.setItem("cartcue_pro", "true");
+    return true;
+  }
+
+  return false;
+}
 
 function getStoredSubscription(): StoredSubscription | null {
   if (typeof window === "undefined") {
@@ -58,7 +110,10 @@ export function saveAmazonSubscription(subscription: StoredSubscription) {
   if (subscription.active) {
     localStorage.setItem("cartcue_pro", "true");
   } else {
-    localStorage.removeItem("cartcue_pro");
+    // Do not clear pro if owner unlock is active
+    if (!isOwnerUnlocked()) {
+      localStorage.removeItem("cartcue_pro");
+    }
   }
 }
 
@@ -68,7 +123,10 @@ export function clearAmazonSubscription() {
   }
 
   localStorage.removeItem("cartcue_amazon_subscription");
-  localStorage.removeItem("cartcue_pro");
+  // Never clear owner unlock when clearing Amazon receipt
+  if (!isOwnerUnlocked()) {
+    localStorage.removeItem("cartcue_pro");
+  }
 }
 
 function isSubscriptionActive(subscription: StoredSubscription): boolean {
@@ -149,6 +207,18 @@ export function getPlanState(): PlanState {
     };
   }
 
+  // Owner: always free Pro for charltommie18@gmail.com (after unlock)
+  if (isOwnerUnlocked()) {
+    return {
+      plan: "pro",
+      trialEndsAt: null,
+      generationsLeft: null,
+      subscriptionEndAt: null,
+      autoRenewing: false,
+      freeTrialEndAt: null,
+    };
+  }
+
   const subscription = getStoredSubscription();
 
   if (subscription && isSubscriptionActive(subscription)) {
@@ -220,6 +290,11 @@ export function consumeGeneration() {
     return;
   }
 
+  // Owner never consumes trial generations
+  if (isOwnerUnlocked()) {
+    return;
+  }
+
   const used = parseInt(
     localStorage.getItem("cartcue_generations_used") || "0",
     10
@@ -242,41 +317,32 @@ export function resetTrial() {
 
   localStorage.removeItem("cartcue_trial_start");
   localStorage.removeItem("cartcue_generations_used");
-  localStorage.removeItem("cartcue_pro");
+  // Do not clear owner unlock on trial reset
+  if (!isOwnerUnlocked()) {
+    localStorage.removeItem("cartcue_pro");
+  }
   localStorage.removeItem("cartcue_amazon_subscription");
 }
 
 /**
  * Called after a successful Amazon RVS verification.
  */
-export function activateAmazonSub(
-  receiptId: string | null,
-  verification: {
-    active: boolean;
-    autoRenewing?: boolean;
-    renewalDate?: number | null;
-    cancelDate?: number | null;
-    freeTrialEndDate?: number | null;
-    gracePeriodEndDate?: number | null;
-  }
-) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  if (!verification.active) {
-    clearAmazonSubscription();
-    return;
-  }
-
+export function activateAmazonSub(input: {
+  receiptId?: string | null;
+  autoRenewing?: boolean;
+  renewalDate?: number | null;
+  cancelDate?: number | null;
+  freeTrialEndDate?: number | null;
+  gracePeriodEndDate?: number | null;
+}) {
   saveAmazonSubscription({
     active: true,
-    autoRenewing: verification.autoRenewing !== false,
-    renewalDate: verification.renewalDate ?? null,
-    cancelDate: verification.cancelDate ?? null,
-    freeTrialEndDate: verification.freeTrialEndDate ?? null,
-    gracePeriodEndDate: verification.gracePeriodEndDate ?? null,
-    receiptId: receiptId,
+    autoRenewing: Boolean(input.autoRenewing),
+    renewalDate: input.renewalDate ?? null,
+    cancelDate: input.cancelDate ?? null,
+    freeTrialEndDate: input.freeTrialEndDate ?? null,
+    gracePeriodEndDate: input.gracePeriodEndDate ?? null,
+    receiptId: input.receiptId ?? null,
     verifiedAt: Date.now(),
   });
 }
