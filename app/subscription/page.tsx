@@ -80,7 +80,14 @@ export default function SubscriptionPage() {
 
       await AmazonIAP.fulfillPurchase(result.receiptId);
 
-      activateAmazonSub(result.receiptId, verification);
+      activateAmazonSub({
+        receiptId: result.receiptId,
+        autoRenewing: verification?.autoRenewing,
+        renewalDate: verification?.renewalDate ?? null,
+        cancelDate: verification?.cancelDate ?? null,
+        freeTrialEndDate: verification?.freeTrialEndDate ?? null,
+        gracePeriodEndDate: verification?.gracePeriodEndDate ?? null,
+      });
 
       setState(getPlanState());
       setNotice(
@@ -148,7 +155,14 @@ export default function SubscriptionPage() {
 
       await AmazonIAP.fulfillPurchase(activeReceipt.receiptId);
 
-      activateAmazonSub(activeReceipt.receiptId, verification);
+      activateAmazonSub({
+        receiptId: activeReceipt.receiptId,
+        autoRenewing: verification?.autoRenewing,
+        renewalDate: verification?.renewalDate ?? null,
+        cancelDate: verification?.cancelDate ?? null,
+        freeTrialEndDate: verification?.freeTrialEndDate ?? null,
+        gracePeriodEndDate: verification?.gracePeriodEndDate ?? null,
+      });
 
       setState(getPlanState());
       setNotice("Your CartCue Pro subscription has been restored.");
