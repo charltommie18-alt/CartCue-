@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Footer from "@/components/footer";
 import InstallButton from "@/components/install-button";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
   title: "CartCue",
@@ -31,6 +32,7 @@ export default function RootLayout({
         <InstallButton />
         {children}
         <Footer />
+        <SpeedInsights />
       </body>
     </html>
   );
