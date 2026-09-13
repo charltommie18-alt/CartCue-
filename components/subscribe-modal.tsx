@@ -86,7 +86,7 @@ export default function SubscribeModal({
           disabled={loading}
           className="mt-5 block w-full rounded-full bg-orange-500 py-3.5 font-bold text-white disabled:opacity-50"
         >
-          {loading ? "Connecting to Amazon…" : "Start 7-Day Free Trial"}
+          {loading ? "Connecting to Amazon…" : "Subscribe with Amazon"}
         </button>
 
         {error && (
