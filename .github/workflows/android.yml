@@ -1,15 +1,12 @@
-name: Build Android App
+name: Build Android APK - CartCue Amazon IAP
 
 on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -18,7 +15,7 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18'
-          cache: ''  # Disable caching
+          cache: ''
 
       - name: Setup Java JDK
         uses: actions/setup-java@v3
@@ -32,9 +29,55 @@ jobs:
       - name: Install Capacitor
         run: npm install @capacitor/core @capacitor/cli @capacitor/android
 
-      - name: Build web project
-        run: npm run build
+      - name: Prepare public folder
+        run: mkdir -p public
 
+      - name: Add Android platform
+        run: npx --yes @capacitor/cli add android
+
+      - name: Sync Capacitor assets
+        run: npx cap sync android
+
+      - name: Download Amazon Appstore SDK
+        run: |
+          mkdir -p android/app/libs
+          curl -fsSL https://repo1.maven.org/maven2/com/amazon/device/amazon-appstore-sdk/3.0.9/amazon-appstore-sdk-3.0.9.jar -o android/app/libs/amazon-appstore-sdk-3.0.9.jar
+
+      - name: Copy Amazon IAP files
+        run: |
+          mkdir -p android/app/src/main/assets
+          mkdir -p android/app/src/main/java/com/cartcue/app
+          cp amazon-iap/AppstoreAuthenticationKey.pem android/app/src/main/assets/
+          cp amazon-iap/AmazonIAPPlugin.java android/app/src/main/java/com/cartcue/app/
+          cp amazon-iap/MainActivity.java android/app/src/main/java/com/cartcue/app/
+
+      - name: Add Amazon SDK to Gradle
+        run: |
+          if ! grep -q "amazon-appstore-sdk" android/app/build.gradle; then
+            sed -i "/dependencies {/a\    implementation files('libs/amazon-appstore-sdk-3.0.9.jar')" android/app/build.gradle
+          fi
+
+      - name: Patch Android Manifest for Amazon IAP
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if ! grep -q "com.amazon.inapp.purchasing.Permission.NOTIFY" $MANIFEST; then
+            sed -i 's|<application|<uses-permission android:name="com.amazon.inapp.purchasing.Permission.NOTIFY" />\n    <application|' $MANIFEST
+          fi
+          if ! grep -q "com.amazon.device.iap.ResponseReceiver" $MANIFEST; then
+            sed -i 's|</application>|    <receiver android:name="com.amazon.device.iap.ResponseReceiver" android:exported="true" android:permission="com.amazon.inapp.purchasing.Permission.NOTIFY"><intent-filter><action android:name="com.amazon.inapp.purchasing.NOTIFY" /></intent-filter></receiver>\n    </application>|' $MANIFEST
+          fi
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v3
+        with:
+          name: cartcue-amazon-iap-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
       - name: Add Android platform
         run: npx --yes @capacitor/cli add android
 
