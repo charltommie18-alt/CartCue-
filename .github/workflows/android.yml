@@ -23,13 +23,21 @@ jobs:
           java-version: 17
 
       - name: Install dependencies
-        run: npm install
+        run: |
+          npm install
+          npm install @capacitor/cli@6.1.2 --save-dev
+
+      - name: Prepare webDir
+        run: mkdir -p public
 
       - name: Add Android platform
-        run: npx --yes -p @capacitor/cli@6.1.2 cap add android
+        run: |
+          echo "Checking for cap binary..."
+          ls -la node_modules/.bin/ || true
+          npx --yes @capacitor/cli@6.1.2 add android
 
       - name: Sync
-        run: npx --yes -p @capacitor/cli@6.1.2 cap sync android
+        run: npx --yes @capacitor/cli@6.1.2 sync android
 
       - name: Download Amazon SDK
         run: |
@@ -46,11 +54,15 @@ jobs:
 
       - name: Patch Gradle
         run: |
-          sed -i "/dependencies {/a\    implementation 'com.amazon.device:amazon-appstore-sdk:3.0.9'" android/app/build.gradle
+          if ! grep -q "amazon-appstore-sdk" android/app/build.gradle; then
+            sed -i "/dependencies {/a\    implementation 'com.amazon.device:amazon-appstore-sdk:3.0.9'" android/app/build.gradle
+          fi
 
       - name: Patch Manifest
         run: |
-          sed -i 's|<application|<uses-permission android:name="com.amazon.inapp.purchasing.Permission.NOTIFY" />\n    <application|' android/app/src/main/AndroidManifest.xml
+          if ! grep -q "com.amazon.inapp.purchasing.Permission.NOTIFY" android/app/src/main/AndroidManifest.xml; then
+            sed -i 's|<application|<uses-permission android:name="com.amazon.inapp.purchasing.Permission.NOTIFY" />\n    <application|' android/app/src/main/AndroidManifest.xml
+          fi
 
       - name: Build APK
         run: |
