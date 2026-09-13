@@ -18,34 +18,31 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18'
-          cache: 'npm'
+          cache: ''  # Disable caching
 
-      - name: Setup Java
+      - name: Setup Java JDK
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+      - name: Install npm dependencies
+        run: npm install --legacy-peer-deps
 
-      - name: Install Capacitor dependencies
-        run: |
-          npm install @capacitor/core @capacitor/cli @capacitor/android
+      - name: Install Capacitor
+        run: npm install @capacitor/core @capacitor/cli @capacitor/android
 
-      - name: Prepare webDir for Capacitor
+      - name: Build web project
         run: npm run build
 
-      - name: Add Capacitor Android platform
-        run: |
-          npx --yes @capacitor/cli add android
-        env:
-          CI: true
+      - name: Add Android platform
+        run: npx --yes @capacitor/cli add android
 
-      - name: Sync Capacitor
+      - name: Sync Capacitor assets
         run: npx cap sync android
 
-      - name: Build Android
+      - name: Build APK
         run: |
           cd android
+          chmod +x gradlew
           ./gradlew assembleDebug
