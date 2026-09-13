@@ -1,52 +1,51 @@
-name: Build Android APK - CartCue Amazon IAP
+name: Build Android App
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
         with:
-          node-version: 20
+          node-version: '18'
+          cache: 'npm'
 
-      - uses: actions/setup-java@v4
+      - name: Setup Java
+        uses: actions/setup-java@v3
         with:
-          distribution: temurin
-          java-version: 17
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: Install
-        run: npm install && npm install @capacitor/cli@6.1.2
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
 
-      - name: Add Android
-        run: npx @capacitor/cli@6.1.2 add android
-
-      - name: Sync
-        run: npx @capacitor/cli@6.1.2 sync android
-
-      - name: Amazon SDK
+      - name: Install Capacitor dependencies
         run: |
-          mkdir -p android/app/libs
-          curl -fsSL https://repo1.maven.org/maven2/com/amazon/device/amazon-appstore-sdk/3.0.9/amazon-appstore-sdk-3.0.9.jar -o android/app/libs/amazon-appstore-sdk-3.0.9.jar
+          npm install @capacitor/core @capacitor/cli @capacitor/android
 
-      - name: Copy plugin
+      - name: Prepare webDir for Capacitor
+        run: npm run build
+
+      - name: Add Capacitor Android platform
         run: |
-          mkdir -p android/app/src/main/assets android/app/src/main/java/com/cartcue/app
-          cp amazon-iap/AppstoreAuthenticationKey.pem android/app/src/main/assets/
-          cp amazon-iap/AmazonIAPPlugin.java android/app/src/main/java/com/cartcue/app/
-          cp amazon-iap/MainActivity.java android/app/src/main/java/com/cartcue/app/
+          npx --yes @capacitor/cli add android
+        env:
+          CI: true
 
-      - name: Build
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Build Android
         run: |
           cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: cartcue-amazon-iap-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          ./gradlew assembleDebug
