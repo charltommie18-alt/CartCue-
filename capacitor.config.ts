@@ -5,9 +5,14 @@ const config: CapacitorConfig = {
   appName: "CartCue",
   webDir: "public",
   server: {
-  url: "https://cart-cue.vercel.app",
-  cleartext: false,
-},
+    // Must match the live Next.js deployment that contains the latest IAP code.
+    // Render is currently suspended — use the working Vercel URL.
+    url: "https://cart-cue.vercel.app",
+    cleartext: false,
+  },
+  android: {
+    allowMixedContent: false,
+  },
 };
 
 export default config;
