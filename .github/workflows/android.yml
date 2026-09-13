@@ -57,14 +57,11 @@ jobs:
             sed -i "/dependencies {/a\    implementation files('libs/amazon-appstore-sdk-3.0.9.jar')" android/app/build.gradle
           fi
 
-      - name: Patch Android Manifest for Amazon IAP
+      - name: Patch Android Manifest
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           if ! grep -q "com.amazon.inapp.purchasing.Permission.NOTIFY" $MANIFEST; then
             sed -i 's|<application|<uses-permission android:name="com.amazon.inapp.purchasing.Permission.NOTIFY" />\n    <application|' $MANIFEST
-          fi
-          if ! grep -q "com.amazon.device.iap.ResponseReceiver" $MANIFEST; then
-            sed -i 's|</application>|    <receiver android:name="com.amazon.device.iap.ResponseReceiver" android:exported="true" android:permission="com.amazon.inapp.purchasing.Permission.NOTIFY"><intent-filter><action android:name="com.amazon.inapp.purchasing.NOTIFY" /></intent-filter></receiver>\n    </application>|' $MANIFEST
           fi
 
       - name: Build APK
@@ -78,14 +75,3 @@ jobs:
         with:
           name: cartcue-amazon-iap-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
-      - name: Add Android platform
-        run: npx --yes @capacitor/cli add android
-
-      - name: Sync Capacitor assets
-        run: npx cap sync android
-
-      - name: Build APK
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug
