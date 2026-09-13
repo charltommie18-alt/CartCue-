@@ -57,9 +57,9 @@ interface AmazonIAPPlugin {
 const AmazonIAPNative = registerPlugin<AmazonIAPPlugin>("AmazonIAP");
 
 function ensureAmazonAndroid() {
-  if (Capacitor.getPlatform() !== "android") {
+  if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "android") {
     throw new Error(
-      "Amazon Appstore payments are only available in the Android Amazon Appstore version of CartCue."
+      "Amazon Appstore payments are only available inside the Amazon Appstore (native Android) version of CartCue. Open the app installed from the Amazon Appstore or App Tester and try again."
     );
   }
 }
