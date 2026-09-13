@@ -55,11 +55,11 @@ jobs:
           if [ -d android ]; then
             echo "android/ already present"
           else
-            npx --yes @capacitor/cli@6.1.2 add android
+            ./node_modules/.bin/cap add android
           fi
 
       - name: Sync Capacitor
-        run: npx --yes @capacitor/cli@6.1.2 sync android
+        run: ./node_modules/.bin/cap sync android
 
       - name: Download Amazon Appstore SDK from Maven Central
         run: |
