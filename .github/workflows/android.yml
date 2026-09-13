@@ -29,12 +29,9 @@ jobs:
       - name: Install dependencies
         run: npm install --no-fund --no-audit
 
-      # App uses capacitor server.url (Vercel). Minimal webDir is enough for the shell APK.
       - name: Prepare webDir for Capacitor
         run: |
           mkdir -p public
-          # Prefer the committed public/index.html (points to the live Vercel URL).
-          # Only create a minimal fallback if the file is missing.
           if [ ! -f public/index.html ]; then
             cat > public/index.html << 'EOF'
           <!DOCTYPE html>
@@ -58,11 +55,11 @@ jobs:
           if [ -d android ]; then
             echo "android/ already present"
           else
-            npx --yes cap add android
+            npx --yes @capacitor/cli@6.1.2 add android
           fi
 
       - name: Sync Capacitor
-        run: npx --yes cap sync android
+        run: npx --yes @capacitor/cli@6.1.2 sync android
 
       - name: Download Amazon Appstore SDK from Maven Central
         run: |
