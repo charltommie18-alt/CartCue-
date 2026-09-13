@@ -1,285 +1,187 @@
-"use client";
+name: Build Android APK - CartCue Amazon IAP
 
-import { useEffect, useState } from "react";
-import { Capacitor } from "@capacitor/core";
+on:
+  workflow_dispatch:
 
-import AmazonIAP from "@/lib/amazon-iap";
-import {
-  AMAZON_PARENT_SKU,
-  AMAZON_SUB_SKU,
-  activateAmazonSub,
-  getPlanState,
-} from "@/lib/plan";
-import type { PlanState } from "@/lib/plan";
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-function isAmazonNativeBuild(): boolean {
-  try {
-    // Must be running inside the Capacitor Android container.
-    // When true, the AmazonIAP plugin and PurchasingService are available.
-    return (
-      Capacitor.isNativePlatform() &&
-      Capacitor.getPlatform() === "android"
-    );
-  } catch {
-    return false;
-  }
-}
+    steps:
+      - name: Checkout CartCue
+        uses: actions/checkout@v4
 
-export default function SubscriptionPage() {
-  const [state, setState] = useState<PlanState | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [isNative, setIsNative] = useState(false);
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
 
-  useEffect(() => {
-    setState(getPlanState());
-    setIsNative(isAmazonNativeBuild());
-  }, []);
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-  async function handleAmazonPurchase() {
-    setNotice(null);
+      - name: Install dependencies
+        run: npm install
 
-    if (!isAmazonNativeBuild()) {
-      setNotice(
-        "Amazon subscriptions can only be purchased inside the Amazon Appstore version of CartCue. " +
-          "Install CartCue from the Amazon Appstore (or Amazon App Tester), open this screen again, " +
-          "then tap Subscribe with Amazon."
-      );
-      return;
-    }
+      - name: Build Next.js app
+        run: npm run build
 
-    setBusy(true);
+      - name: Add Capacitor Android
+        run: npx cap add android
 
-    try {
-      // Purchase the TERM SKU (CartCue_monthly_term). Amazon links it to the parent.
-      const result = await AmazonIAP.purchase({
-        sku: AMAZON_SUB_SKU,
-      });
+      - name: Sync Capacitor
+        run: npx cap sync android
 
-      if (!result?.receiptId) {
-        throw new Error("Amazon did not return a purchase receipt.");
-      }
+      - name: Install Amazon Appstore SDK 3.0.9
+        run: |
+          mkdir -p android/app/libs
 
-      if (!result?.userId) {
-        throw new Error(
-          "Amazon did not return the customer ID needed to verify the purchase."
-        );
-      }
+          curl -L --fail --retry 3 \
+            -o android/app/libs/amazon-appstore-sdk-3.0.9.jar \
+            https://repo1.maven.org/maven2/com/amazon/device/amazon-appstore-sdk/3.0.9/amazon-appstore-sdk-3.0.9.jar
 
-      const parentSku = result.sku || "";
-      const termSku = result.termSku || "";
+          test -s android/app/libs/amazon-appstore-sdk-3.0.9.jar
 
-      const skuMatches =
-        parentSku === AMAZON_PARENT_SKU ||
-        parentSku === AMAZON_SUB_SKU ||
-        termSku === AMAZON_SUB_SKU ||
-        termSku === AMAZON_PARENT_SKU;
+      - name: Install Amazon authentication key
+        run: |
+          mkdir -p android/app/src/main/assets
 
-      if (!skuMatches) {
-        throw new Error(
-          `Unexpected Amazon SKU. Parent: ${parentSku || "none"}, Term: ${
-            termSku || "none"
-          }`
-        );
-      }
+          test -f amazon-iap/AppstoreAuthenticationKey.pem
 
-      const verification = await AmazonIAP.verifyAmazonReceipt(
-        result.receiptId,
-        result.userId,
-        AMAZON_SUB_SKU
-      );
+          cp amazon-iap/AppstoreAuthenticationKey.pem \
+            android/app/src/main/assets/AppstoreAuthenticationKey.pem
 
-      if (!verification?.active) {
-        throw new Error(
-          verification?.error ||
-            "Amazon did not verify an active subscription."
-        );
-      }
+      - name: Install CartCue Amazon IAP plugin
+        run: |
+          mkdir -p android/app/src/main/java/com/cartcue/app
 
-      await AmazonIAP.fulfillPurchase(result.receiptId);
+          cp amazon-iap/AmazonIAPPlugin.java \
+            android/app/src/main/java/com/cartcue/app/AmazonIAPPlugin.java
 
-      activateAmazonSub({
-        receiptId: result.receiptId,
-        autoRenewing: verification?.autoRenewing,
-        renewalDate: verification?.renewalDate ?? null,
-        cancelDate: verification?.cancelDate ?? null,
-        freeTrialEndDate: verification?.freeTrialEndDate ?? null,
-        gracePeriodEndDate: verification?.gracePeriodEndDate ?? null,
-      });
+          cp amazon-iap/MainActivity.java \
+            android/app/src/main/java/com/cartcue/app/MainActivity.java
 
-      setState(getPlanState());
-      setNotice(
-        "Payment successful. Your CartCue Pro subscription is active."
-      );
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : String(error);
+      - name: Add Amazon SDK to Gradle
+        shell: bash
+        run: |
+          BUILD_GRADLE="android/app/build.gradle"
 
-      if (message.toUpperCase().includes("ALREADY_PURCHASED")) {
-        await restoreAmazonPurchase();
-      } else if (!/cancel/i.test(message)) {
-        setNotice(`Amazon purchase could not be completed: ${message}`);
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
+          if ! grep -q "amazon-appstore-sdk-3.0.9.jar" "$BUILD_GRADLE"
+          then
+            python3 - <<'PY'
+from pathlib import Path
 
-  async function restoreAmazonPurchase() {
-    setNotice(null);
+path = Path("android/app/build.gradle")
+text = path.read_text()
 
-    if (!isAmazonNativeBuild()) {
-      setNotice(
-        "Restore is only available inside the Amazon Appstore version of CartCue."
-      );
-      return;
-    }
+needle = "dependencies {"
 
-    setBusy(true);
+if needle not in text:
+    raise SystemExit(
+        "Could not find dependencies block."
+    )
 
-    try {
-      const result = await AmazonIAP.restorePurchases();
+replacement = (
+    needle
+    + "\n"
+    + "    implementation files('libs/amazon-appstore-sdk-3.0.9.jar')"
+)
 
-      const receipts = Array.isArray(result?.receipts)
-        ? result.receipts
-        : [];
+text = text.replace(
+    needle,
+    replacement,
+    1
+)
 
-      const activeReceipt = receipts.find(
-        (receipt) =>
-          !receipt?.canceled &&
-          (receipt?.sku === AMAZON_SUB_SKU ||
-            receipt?.termSku === AMAZON_SUB_SKU ||
-            receipt?.sku === AMAZON_PARENT_SKU ||
-            receipt?.termSku === AMAZON_PARENT_SKU)
-      );
+path.write_text(text)
+PY
+          fi
 
-      if (!activeReceipt?.receiptId || !result?.userId) {
-        setNotice("No active CartCue Amazon subscription was found.");
-        return;
-      }
+          grep -n "amazon-appstore-sdk-3.0.9.jar" \
+            "$BUILD_GRADLE"
 
-      const verification = await AmazonIAP.verifyAmazonReceipt(
-        activeReceipt.receiptId,
-        result.userId,
-        activeReceipt.termSku || activeReceipt.sku || AMAZON_SUB_SKU
-      );
+      - name: Patch Android manifest for Amazon IAP
+        shell: bash
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
 
-      if (!verification?.active) {
-        setNotice(
-          "Amazon could not verify an active CartCue subscription."
-        );
-        return;
-      }
+          python3 - <<'PY'
+from pathlib import Path
 
-      await AmazonIAP.fulfillPurchase(activeReceipt.receiptId);
+path = Path(
+    "android/app/src/main/AndroidManifest.xml"
+)
 
-      activateAmazonSub({
-        receiptId: activeReceipt.receiptId,
-        autoRenewing: verification?.autoRenewing,
-        renewalDate: verification?.renewalDate ?? null,
-        cancelDate: verification?.cancelDate ?? null,
-        freeTrialEndDate: verification?.freeTrialEndDate ?? null,
-        gracePeriodEndDate: verification?.gracePeriodEndDate ?? null,
-      });
+text = path.read_text()
 
-      setState(getPlanState());
-      setNotice("Your CartCue Pro subscription has been restored.");
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : String(error);
+permission = (
+    '<uses-permission '
+    'android:name="com.amazon.inapp.purchasing.Permission.NOTIFY" />'
+)
 
-      if (!/cancel/i.test(message)) {
-        setNotice(`Restore failed: ${message}`);
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
+queries = """<queries>
+        <package android:name="com.amazon.venezia" />
+        <package android:name="com.amazon.sdktestclient" />
+    </queries>"""
 
-  const isPro = state?.plan === "pro";
+receiver = """<receiver
+        android:name="com.amazon.device.iap.ResponseReceiver"
+        android:exported="true"
+        android:permission="com.amazon.inapp.purchasing.Permission.NOTIFY">
+        <intent-filter>
+            <action
+                android:name="com.amazon.inapp.purchasing.NOTIFY" />
+        </intent-filter>
+    </receiver>"""
 
-  return (
-    <main className="mx-auto min-h-screen max-w-lg px-4 py-10">
-      <h1 className="text-2xl font-black tracking-tight">
-        CartCue Pro
-      </h1>
+if permission not in text:
+    text = text.replace(
+        "<application",
+        permission + "\n\n    <application",
+        1
+    )
 
-      <p className="mt-2 text-sm text-neutral-600">
-        Unlimited product kits, correct photos, and Amazon affiliate
-        links. Billed by Amazon Appstore.
-      </p>
+if "<package android:name=\"com.amazon.venezia\"" not in text:
+    text = text.replace(
+        "<application",
+        queries + "\n\n    <application",
+        1
+    )
 
-      <div className="mt-6 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
-        <div className="flex items-baseline justify-between">
-          <span className="text-3xl font-black">$4.99</span>
-          <span className="text-sm text-neutral-500">/ month</span>
-        </div>
+if "com.amazon.device.iap.ResponseReceiver" not in text:
+    text = text.replace(
+        "</application>",
+        "    " + receiver + "\n\n</application>",
+        1
+    )
 
-        <p className="mt-1 text-sm font-semibold text-orange-600">
-          7-day free trial (when enabled on the Amazon term)
-        </p>
+path.write_text(text)
+PY
 
-        <ul className="mt-4 space-y-2 text-sm text-neutral-700">
-          <li>✓ Unlimited generations</li>
-          <li>✓ Correct product photos</li>
-          <li>✓ Amazon affiliate links</li>
-          <li>✓ Managed by Amazon billing</li>
-        </ul>
+          cat "$MANIFEST"
 
-        {isPro ? (
-          <div className="mt-6 rounded-xl bg-green-50 p-4 text-sm text-green-800">
-            You are on CartCue Pro.
-            {state?.subscriptionEndAt && (
-              <p className="mt-1 text-xs opacity-80">
-                Next renewal / end:{" "}
-                {new Date(state.subscriptionEndAt).toLocaleDateString()}
-              </p>
-            )}
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={handleAmazonPurchase}
-            disabled={busy}
-            className="mt-6 w-full rounded-xl bg-gradient-to-r from-[#FF9900] to-[#FF6600] py-4 text-center text-base font-bold text-white disabled:opacity-60"
-          >
-            {busy
-              ? "Connecting to Amazon…"
-              : "Subscribe with Amazon — $4.99/mo"}
-          </button>
-        )}
+      - name: Check Amazon files
+        run: |
+          test -f android/app/src/main/java/com/cartcue/app/AmazonIAPPlugin.java
+          test -f android/app/src/main/java/com/cartcue/app/MainActivity.java
+          test -f android/app/libs/amazon-appstore-sdk-3.0.9.jar
+          test -f android/app/src/main/assets/AppstoreAuthenticationKey.pem
 
-        <button
-          type="button"
-          onClick={restoreAmazonPurchase}
-          disabled={busy}
-          className="mt-3 w-full rounded-xl border border-neutral-300 py-3 text-sm font-semibold text-neutral-700 disabled:opacity-60"
-        >
-          Restore Amazon purchases
-        </button>
+          grep -q \
+            "com.amazon.device.iap.ResponseReceiver" \
+            android/app/src/main/AndroidManifest.xml
 
-        {notice && (
-          <p
-            className={`mt-4 rounded-xl p-3 text-sm ${
-              /successful|restored|active/i.test(notice)
-                ? "bg-green-50 text-green-800"
-                : "bg-amber-50 text-amber-900"
-            }`}
-          >
-            {notice}
-          </p>
-        )}
+      - name: Build debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
-        <p className="mt-4 text-xs text-neutral-400">
-          Parent SKU: {AMAZON_PARENT_SKU}
-          <br />
-          Term SKU: {AMAZON_SUB_SKU}
-          <br />
-          {isNative
-            ? "Running in Amazon Appstore build — purchase is available."
-            : "Purchase works only inside the Amazon Appstore build of CartCue (native Android APK / App Tester)."}
-        </p>
-      </div>
-    </main>
-  );
-          }
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: cartcue-amazon-iap-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
