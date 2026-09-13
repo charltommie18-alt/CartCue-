@@ -12,21 +12,38 @@ import {
 } from "@/lib/plan";
 import type { PlanState } from "@/lib/plan";
 
+function isAmazonNativeBuild(): boolean {
+  try {
+    // Must be running inside the Capacitor Android container.
+    // When true, the AmazonIAP plugin and PurchasingService are available.
+    return (
+      Capacitor.isNativePlatform() &&
+      Capacitor.getPlatform() === "android"
+    );
+  } catch {
+    return false;
+  }
+}
+
 export default function SubscriptionPage() {
   const [state, setState] = useState<PlanState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [isNative, setIsNative] = useState(false);
 
   useEffect(() => {
     setState(getPlanState());
+    setIsNative(isAmazonNativeBuild());
   }, []);
 
   async function handleAmazonPurchase() {
     setNotice(null);
 
-    if (!Capacitor.isNativePlatform()) {
+    if (!isAmazonNativeBuild()) {
       setNotice(
-        "Amazon subscriptions are purchased inside the Amazon Appstore version of CartCue. Install CartCue from the Amazon Appstore (or App Tester), then open this screen again."
+        "Amazon subscriptions can only be purchased inside the Amazon Appstore version of CartCue. " +
+          "Install CartCue from the Amazon Appstore (or Amazon App Tester), open this screen again, " +
+          "then tap Subscribe with Amazon."
       );
       return;
     }
@@ -34,6 +51,7 @@ export default function SubscriptionPage() {
     setBusy(true);
 
     try {
+      // Purchase the TERM SKU (CartCue_monthly_term). Amazon links it to the parent.
       const result = await AmazonIAP.purchase({
         sku: AMAZON_SUB_SKU,
       });
@@ -110,9 +128,9 @@ export default function SubscriptionPage() {
   async function restoreAmazonPurchase() {
     setNotice(null);
 
-    if (!Capacitor.isNativePlatform()) {
+    if (!isAmazonNativeBuild()) {
       setNotice(
-        "Restore is available in the Amazon Appstore version of CartCue."
+        "Restore is only available inside the Amazon Appstore version of CartCue."
       );
       return;
     }
@@ -227,7 +245,7 @@ export default function SubscriptionPage() {
           >
             {busy
               ? "Connecting to Amazon…"
-              : "Start free trial — $4.99/mo via Amazon"}
+              : "Subscribe with Amazon — $4.99/mo"}
           </button>
         )}
 
@@ -257,10 +275,11 @@ export default function SubscriptionPage() {
           <br />
           Term SKU: {AMAZON_SUB_SKU}
           <br />
-          Purchase works only inside the Amazon Appstore build of
-          CartCue.
+          {isNative
+            ? "Running in Amazon Appstore build — purchase is available."
+            : "Purchase works only inside the Amazon Appstore build of CartCue (native Android APK / App Tester)."}
         </p>
       </div>
     </main>
   );
-}
+          }
