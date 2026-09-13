@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout CartCue
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node
@@ -20,101 +20,39 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: 17
 
       - name: Install dependencies
-        run: npm install --no-fund --no-audit
+        run: npm install
 
-      - name: Prepare webDir for Capacitor
-        run: |
-          mkdir -p public
-          if [ ! -f public/index.html ]; then
-            cat > public/index.html << 'EOF'
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="utf-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1" />
-            <title>CartCue</title>
-            <script>location.replace("https://cart-cue.vercel.app/");</script>
-          </head>
-          <body><p>Loading CartCue…</p></body>
-          </html>
-          EOF
-          fi
+      - name: Add Android platform
+        run: npx --yes -p @capacitor/cli@6.1.2 cap add android
 
-      - name: Add Capacitor Android platform
-        run: |
-          if [ -d android ]; then
-            echo "android/ already present"
-          else
-            npm install -g @capacitor/cli@6.1.2
-            cap add android
-          fi
+      - name: Sync
+        run: npx --yes -p @capacitor/cli@6.1.2 cap sync android
 
-      - name: Sync Capacitor
-        run: |
-          npm install -g @capacitor/cli@6.1.2
-          cap sync android
-
-      - name: Download Amazon Appstore SDK from Maven Central
+      - name: Download Amazon SDK
         run: |
           mkdir -p android/app/libs
-          curl -fsSL "https://repo1.maven.org/maven2/com/amazon/device/amazon-appstore-sdk/3.0.9/amazon-appstore-sdk-3.0.9.jar" -o android/app/libs/amazon-appstore-sdk-3.0.9.jar
+          curl -fsSL https://repo1.maven.org/maven2/com/amazon/device/amazon-appstore-sdk/3.0.9/amazon-appstore-sdk-3.0.9.jar -o android/app/libs/amazon-appstore-sdk-3.0.9.jar
 
-      - name: Install Amazon authentication key
+      - name: Copy Amazon files
         run: |
           mkdir -p android/app/src/main/assets
-          cp amazon-iap/AppstoreAuthenticationKey.pem android/app/src/main/assets/AppstoreAuthenticationKey.pem
-
-      - name: Install CartCue Amazon IAP plugin
-        run: |
           mkdir -p android/app/src/main/java/com/cartcue/app
-          cp amazon-iap/AmazonIAPPlugin.java android/app/src/main/java/com/cartcue/app/AmazonIAPPlugin.java
-          cp amazon-iap/MainActivity.java android/app/src/main/java/com/cartcue/app/MainActivity.java
+          cp amazon-iap/AppstoreAuthenticationKey.pem android/app/src/main/assets/
+          cp amazon-iap/AmazonIAPPlugin.java android/app/src/main/java/com/cartcue/app/
+          cp amazon-iap/MainActivity.java android/app/src/main/java/com/cartcue/app/
 
-      - name: Add Amazon SDK to Gradle
+      - name: Patch Gradle
         run: |
-          python3 -c "
-          from pathlib import Path
-          path = Path('android/app/build.gradle')
-          text = path.read_text()
-          dep = \"    implementation 'com.amazon.device:amazon-appstore-sdk:3.0.9'\"
-          if 'com.amazon.device:amazon-appstore-sdk' not in text:
-              text = text.replace('dependencies {', 'dependencies {\n' + dep, 1)
-              path.write_text(text)
-          print('gradle updated')
-          "
+          sed -i "/dependencies {/a\    implementation 'com.amazon.device:amazon-appstore-sdk:3.0.9'" android/app/build.gradle
 
-      - name: Patch Android manifest for Amazon IAP
+      - name: Patch Manifest
         run: |
-          python3 -c "
-          from pathlib import Path
-          path = Path('android/app/src/main/AndroidManifest.xml')
-          text = path.read_text()
-          permission = '<uses-permission android:name=\"com.amazon.inapp.purchasing.Permission.NOTIFY\" />'
-          queries = '''<queries>
-                  <package android:name=\"com.amazon.venezia\" />
-              </queries>'''
-          receiver = '''<receiver
-                  android:name=\"com.amazon.device.iap.ResponseReceiver\"
-                  android:exported=\"true\"
-                  android:permission=\"com.amazon.inapp.purchasing.Permission.NOTIFY\">
-                  <intent-filter>
-                      <action android:name=\"com.amazon.inapp.purchasing.NOTIFY\" />
-                  </intent-filter>
-              </receiver>'''
-          if permission not in text:
-              text = text.replace('<application', permission + '\n\n    <application', 1)
-          if 'com.amazon.venezia' not in text:
-              text = text.replace('<application', queries + '\n\n    <application', 1)
-          if 'ResponseReceiver' not in text:
-              text = text.replace('</application>', '    ' + receiver + '\n    </application>', 1)
-          path.write_text(text)
-          print('manifest patched')
-          "
+          sed -i 's|<application|<uses-permission android:name="com.amazon.inapp.purchasing.Permission.NOTIFY" />\n    <application|' android/app/src/main/AndroidManifest.xml
 
-      - name: Build debug APK
+      - name: Build APK
         run: |
           cd android
           chmod +x gradlew
