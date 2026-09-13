@@ -30,29 +30,29 @@ jobs:
       - name: Install dependencies
         run: npm install --no-fund --no-audit
 
-      # App uses capacitor server.url (Render). Minimal webDir is enough for the shell APK.
+      # App uses capacitor server.url (Vercel). Minimal webDir is enough for the shell APK.
       - name: Prepare webDir for Capacitor
         run: |
           mkdir -p public
-          python3 -c "
-          from pathlib import Path
-          p = Path('public/index.html')
-          if not p.exists():
-              p.write_text('''<!DOCTYPE html>
-          <html lang=\"en\">
+          # Prefer the committed public/index.html (points to the live Vercel URL).
+          # Only create a minimal fallback if the file is missing.
+          if [ ! -f public/index.html ]; then
+            cat > public/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
           <head>
-            <meta charset=\"utf-8\" />
-            <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
             <title>CartCue</title>
-            <script>location.replace(\"https://cartcue-8eb4.onrender.com/\");</script>
+            <script>location.replace("https://cart-cue.vercel.app/");</script>
           </head>
           <body><p>Loading CartCue…</p></body>
           </html>
-          ''')
-              print('wrote public/index.html')
-          else:
-              print('public/index.html already exists')
-          "
+          EOF
+            echo "wrote fallback public/index.html"
+          else
+            echo "public/index.html already exists — keeping committed version"
+          fi
 
       - name: Add Capacitor Android platform
         run: |
