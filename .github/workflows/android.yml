@@ -51,19 +51,6 @@ jobs:
           cp amazon-iap/AmazonIAPPlugin.java android/app/src/main/java/com/cartcue/app/
           cp amazon-iap/MainActivity.java android/app/src/main/java/com/cartcue/app/
 
-      - name: Add Amazon SDK to Gradle
-        run: |
-          if ! grep -q "amazon-appstore-sdk" android/app/build.gradle; then
-            sed -i "/dependencies {/a\    implementation files('libs/amazon-appstore-sdk-3.0.9.jar')" android/app/build.gradle
-          fi
-
-      - name: Patch Android Manifest
-        run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          if ! grep -q "com.amazon.inapp.purchasing.Permission.NOTIFY" $MANIFEST; then
-            sed -i 's|<application|<uses-permission android:name="com.amazon.inapp.purchasing.Permission.NOTIFY" />\n    <application|' $MANIFEST
-          fi
-
       - name: Build APK
         run: |
           cd android
