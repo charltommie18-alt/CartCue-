@@ -1,187 +1,329 @@
-name: Build Android APK - CartCue Amazon IAP
+"use client";
 
-on:
-  workflow_dispatch:
+import { useEffect, useState } from "react";
+import AmazonIAP from "@/lib/amazon-iap";
+import {
+  AMAZON_SUB_SKU,
+  getPlanState,
+  saveAmazonSubscription,
+} from "@/lib/plan";
+import type { PlanState } from "@/lib/plan";
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+export default function SubscriptionPage() {
+  const [state, setState] = useState<PlanState | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-    steps:
-      - name: Checkout CartCue
-        uses: actions/checkout@v4
+  useEffect(() => {
+    setState(getPlanState());
+  }, []);
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
+  async function handleAmazonPurchase() {
+    setNotice(null);
+    setBusy(true);
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+    try {
+      const result = await AmazonIAP.subscribeToCartCue();
 
-      - name: Install dependencies
-        run: npm install
+      if (!result?.active || !result?.verification?.active) {
+        throw new Error(
+          "Amazon did not confirm an active subscription."
+        );
+      }
 
-      - name: Build Next.js app
-        run: npm run build
+      const newState = getPlanState();
+      setState(newState);
 
-      - name: Add Capacitor Android
-        run: npx cap add android
+      setNotice(
+        "Payment successful. Your CartCue Pro subscription is active."
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : String(error);
 
-      - name: Sync Capacitor
-        run: npx cap sync android
+      if (
+        message
+          .toUpperCase()
+          .includes("ALREADY_PURCHASED")
+      ) {
+        await restoreAmazonPurchase();
+      } else if (!/cancel/i.test(message)) {
+        setNotice(
+          `Amazon purchase could not be completed: ${message}`
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
 
-      - name: Install Amazon Appstore SDK 3.0.9
-        run: |
-          mkdir -p android/app/libs
+  async function restoreAmazonPurchase() {
+    setNotice(null);
+    setBusy(true);
 
-          curl -L --fail --retry 3 \
-            -o android/app/libs/amazon-appstore-sdk-3.0.9.jar \
-            https://repo1.maven.org/maven2/com/amazon/device/amazon-appstore-sdk/3.0.9/amazon-appstore-sdk-3.0.9.jar
+    try {
+      const result = await AmazonIAP.restorePurchases();
 
-          test -s android/app/libs/amazon-appstore-sdk-3.0.9.jar
+      const receipts = Array.isArray(result?.receipts)
+        ? result.receipts
+        : [];
 
-      - name: Install Amazon authentication key
-        run: |
-          mkdir -p android/app/src/main/assets
+      const activeReceipt = receipts.find(
+        (receipt) =>
+          !receipt?.canceled &&
+          (
+            receipt?.sku === AMAZON_SUB_SKU ||
+            receipt?.termSku === AMAZON_SUB_SKU ||
+            receipt?.sku === "CartCue_monthly_sub" ||
+            receipt?.termSku === "CartCue_monthly_sub" ||
+            receipt?.termSku === "CartCue_monthly_sub_term"
+          )
+      );
 
-          test -f amazon-iap/AppstoreAuthenticationKey.pem
+      if (!activeReceipt?.receiptId || !result?.userId) {
+        setNotice(
+          "No active CartCue Amazon subscription was found."
+        );
+        return;
+      }
 
-          cp amazon-iap/AppstoreAuthenticationKey.pem \
-            android/app/src/main/assets/AppstoreAuthenticationKey.pem
+      const verification =
+        await AmazonIAP.verifyAmazonReceipt(
+          activeReceipt.receiptId,
+          result.userId,
+          activeReceipt.termSku ||
+            activeReceipt.sku ||
+            AMAZON_SUB_SKU
+        );
 
-      - name: Install CartCue Amazon IAP plugin
-        run: |
-          mkdir -p android/app/src/main/java/com/cartcue/app
+      if (!verification?.active) {
+        setNotice(
+          "Amazon could not verify an active CartCue subscription."
+        );
+        return;
+      }
 
-          cp amazon-iap/AmazonIAPPlugin.java \
-            android/app/src/main/java/com/cartcue/app/AmazonIAPPlugin.java
+      saveAmazonSubscription({
+        active: true,
+        autoRenewing:
+          verification.autoRenewing !== false,
+        renewalDate:
+          verification.renewalDate || null,
+        cancelDate:
+          verification.cancelDate || null,
+        freeTrialEndDate:
+          verification.freeTrialEndDate || null,
+        receiptId: activeReceipt.receiptId,
+        verifiedAt: Date.now(),
+      });
 
-          cp amazon-iap/MainActivity.java \
-            android/app/src/main/java/com/cartcue/app/MainActivity.java
+      setState(getPlanState());
 
-      - name: Add Amazon SDK to Gradle
-        shell: bash
-        run: |
-          BUILD_GRADLE="android/app/build.gradle"
+      setNotice(
+        "Your CartCue Pro subscription has been restored and verified by Amazon."
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : String(error);
 
-          if ! grep -q "amazon-appstore-sdk-3.0.9.jar" "$BUILD_GRADLE"
-          then
-            python3 - <<'PY'
-from pathlib import Path
+      setNotice(
+        `Could not restore the Amazon subscription: ${message}`
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
-path = Path("android/app/build.gradle")
-text = path.read_text()
+  function handleManageSubscription() {
+    setNotice(
+      "To cancel, open the Amazon Appstore and manage CartCue under your subscriptions. Cancelling there stops future Amazon billing."
+    );
+  }
 
-needle = "dependencies {"
+  return (
+    <div className="min-h-screen bg-neutral-100">
+      <header className="border-b border-neutral-200 bg-white">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
+          <h1 className="text-xl font-bold text-neutral-900">
+            Cart<span className="text-orange-600">Cue</span>{" "}
+            Subscription
+          </h1>
 
-if needle not in text:
-    raise SystemExit(
-        "Could not find dependencies block."
-    )
+          <a
+            href="/"
+            className="text-sm font-medium text-orange-600 hover:underline"
+          >
+            ← Back to app
+          </a>
+        </div>
+      </header>
 
-replacement = (
-    needle
-    + "\n"
-    + "    implementation files('libs/amazon-appstore-sdk-3.0.9.jar')"
-)
+      <main className="mx-auto max-w-5xl space-y-6 px-4 py-8">
+        {state && (
+          <div className="rounded-xl border border-neutral-200 bg-white p-4 text-sm text-neutral-700 shadow-sm">
+            <p>
+              Current plan:{" "}
+              <span className="font-semibold uppercase">
+                {state.plan}
+              </span>
 
-text = text.replace(
-    needle,
-    replacement,
-    1
-)
+              {state.plan === "trial" &&
+                state.trialEndsAt && (
+                  <>
+                    {" "}
+                    · Trial ends{" "}
+                    {new Date(
+                      state.trialEndsAt
+                    ).toLocaleDateString()}
+                  </>
+                )}
 
-path.write_text(text)
-PY
-          fi
+              {state.generationsLeft !== null && (
+                <>
+                  {" "}
+                  · {state.generationsLeft} generations remaining
+                </>
+              )}
 
-          grep -n "amazon-appstore-sdk-3.0.9.jar" \
-            "$BUILD_GRADLE"
+              {state.plan === "pro" && (
+                <>
+                  {" "}
+                  · CartCue Pro active
+                </>
+              )}
+            </p>
+          </div>
+        )}
 
-      - name: Patch Android manifest for Amazon IAP
-        shell: bash
-        run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
+        {notice && (
+          <div className="rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-800 shadow-sm">
+            {notice}
+          </div>
+        )}
 
-          python3 - <<'PY'
-from pathlib import Path
+        <div className="grid gap-6 md:grid-cols-3">
+          <div className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
+            <h2 className="font-semibold text-neutral-900">
+              Starter
+            </h2>
 
-path = Path(
-    "android/app/src/main/AndroidManifest.xml"
-)
+            <p className="mt-1 text-3xl font-bold text-neutral-900">
+              $0
+            </p>
 
-text = path.read_text()
+            <ul className="mt-4 space-y-2 text-sm text-neutral-600">
+              <li>3 content kits / month</li>
+              <li>Basic styles</li>
+              <li>Save kits on this device</li>
+            </ul>
 
-permission = (
-    '<uses-permission '
-    'android:name="com.amazon.inapp.purchasing.Permission.NOTIFY" />'
-)
+            <a
+              href="/"
+              className="mt-6 block rounded-md border border-neutral-300 px-4 py-2.5 text-center text-sm font-semibold text-neutral-700 hover:bg-neutral-100"
+            >
+              Use free
+            </a>
+          </div>
 
-queries = """<queries>
-        <package android:name="com.amazon.venezia" />
-        <package android:name="com.amazon.sdktestclient" />
-    </queries>"""
+          <div className="rounded-xl border-2 border-orange-600 bg-white p-6 shadow-md">
+            <p className="text-xs font-semibold uppercase text-orange-600">
+              Most popular
+            </p>
 
-receiver = """<receiver
-        android:name="com.amazon.device.iap.ResponseReceiver"
-        android:exported="true"
-        android:permission="com.amazon.inapp.purchasing.Permission.NOTIFY">
-        <intent-filter>
-            <action
-                android:name="com.amazon.inapp.purchasing.NOTIFY" />
-        </intent-filter>
-    </receiver>"""
+            <h2 className="mt-1 font-semibold text-neutral-900">
+              Pro Creator
+            </h2>
 
-if permission not in text:
-    text = text.replace(
-        "<application",
-        permission + "\n\n    <application",
-        1
-    )
+            <p className="mt-1 text-3xl font-bold text-neutral-900">
+              $4.99
+              <span className="text-sm font-normal text-neutral-500">
+                /mo
+              </span>
+            </p>
 
-if "<package android:name=\"com.amazon.venezia\"" not in text:
-    text = text.replace(
-        "<application",
-        queries + "\n\n    <application",
-        1
-    )
+            <ul className="mt-4 space-y-2 text-sm text-neutral-600">
+              <li>Unlimited content kits</li>
+              <li>All styles and tones</li>
+              <li>AI captions</li>
+              <li>Amazon Appstore billing</li>
+            </ul>
 
-if "com.amazon.device.iap.ResponseReceiver" not in text:
-    text = text.replace(
-        "</application>",
-        "    " + receiver + "\n\n</application>",
-        1
-    )
+            <button
+              onClick={handleAmazonPurchase}
+              disabled={busy}
+              className="mt-6 w-full rounded-md bg-amber-400 px-4 py-2.5 text-sm font-semibold text-neutral-900 hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {busy
+                ? "Processing Amazon payment…"
+                : "Subscribe with Amazon — $4.99/mo"}
+            </button>
 
-path.write_text(text)
-PY
+            <button
+              onClick={restoreAmazonPurchase}
+              disabled={busy}
+              className="mt-2 w-full rounded-md px-4 py-2 text-xs font-medium text-neutral-600 hover:bg-neutral-100 disabled:opacity-50"
+            >
+              Restore Amazon subscription
+            </button>
 
-          cat "$MANIFEST"
+            <button
+              onClick={handleManageSubscription}
+              className="mt-2 w-full rounded-md border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50"
+            >
+              Manage / Cancel Subscription
+            </button>
 
-      - name: Check Amazon files
-        run: |
-          test -f android/app/src/main/java/com/cartcue/app/AmazonIAPPlugin.java
-          test -f android/app/src/main/java/com/cartcue/app/MainActivity.java
-          test -f android/app/libs/amazon-appstore-sdk-3.0.9.jar
-          test -f android/app/src/main/assets/AppstoreAuthenticationKey.pem
+            <p className="mt-3 text-center font-mono text-[11px] text-neutral-400">
+              SKU: {AMAZON_SUB_SKU}
+            </p>
+          </div>
 
-          grep -q \
-            "com.amazon.device.iap.ResponseReceiver" \
-            android/app/src/main/AndroidManifest.xml
+          <div className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm opacity-80">
+            <h2 className="font-semibold text-neutral-900">
+              Agency
+            </h2>
 
-      - name: Build debug APK
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug
+            <p className="mt-1 text-3xl font-bold text-neutral-900">
+              $14.99
+              <span className="text-sm font-normal text-neutral-500">
+                /mo
+              </span>
+            </p>
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: cartcue-amazon-iap-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+            <ul className="mt-4 space-y-2 text-sm text-neutral-600">
+              <li>Everything in Pro</li>
+              <li>Bulk generation</li>
+              <li>Multiple Instagram profiles</li>
+              <li>Priority support</li>
+            </ul>
+
+            <p className="mt-6 rounded-md border border-neutral-200 px-4 py-2.5 text-center text-sm text-neutral-500">
+              Coming soon
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-center text-xs text-neutral-600">
+          <p className="font-semibold">
+            7-day free trial
+          </p>
+
+          <p className="mt-1">
+            Your Amazon subscription includes a 7-day free
+            trial when you are eligible. After the trial,
+            Amazon continues the subscription at $4.99/month.
+          </p>
+
+          <p className="mt-1">
+            You can manage or cancel your subscription through
+            your Amazon Appstore subscription management.
+          </p>
+        </div>
+      </main>
+    </div>
+  );
+              }
