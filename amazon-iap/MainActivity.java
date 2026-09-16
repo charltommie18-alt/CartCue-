@@ -8,12 +8,17 @@ import com.getcapacitor.BridgeActivity;
 import java.util.HashSet;
 import java.util.Set;
 
-public class MainActivity extends BridgeActivity {
+public class MainActivity
+        extends BridgeActivity {
 
     @Override
     public void onCreate(
             Bundle savedInstanceState
     ) {
+        /*
+         * Register the Amazon IAP Capacitor
+         * plugin before the WebView starts.
+         */
         registerPlugin(
                 AmazonIAPPlugin.class
         );
@@ -27,15 +32,11 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
 
+        /*
+         * Synchronize Amazon IAP state whenever
+         * the application returns to the foreground.
+         */
         try {
-            /*
-             * Amazon IAP listener registration is performed
-             * by AmazonIAPPlugin.load().
-             *
-             * On resume we refresh the Amazon account,
-             * product information and purchase updates.
-             */
-
             PurchasingService.getUserData();
 
             Set<String> productSkus =
@@ -57,15 +58,11 @@ public class MainActivity extends BridgeActivity {
                     false
             );
 
-        } catch (Exception exception) {
-
+        } catch (Exception error) {
             /*
-             * The app may be opened outside an Amazon
-             * Appstore environment during development.
-             *
-             * Do not crash the application in that case.
+             * Amazon IAP may not be available
+             * outside the Amazon Appstore.
              */
-            exception.printStackTrace();
         }
     }
-}
+        }
