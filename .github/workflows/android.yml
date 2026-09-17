@@ -8,14 +8,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout CartCue
         uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: 20
           cache: npm
 
       - name: Setup Java
@@ -50,6 +49,8 @@ jobs:
         run: |
           mkdir -p android/app/src/main/assets
 
+          test -f amazon-iap/AppstoreAuthenticationKey.pem
+
           cp amazon-iap/AppstoreAuthenticationKey.pem \
             android/app/src/main/assets/AppstoreAuthenticationKey.pem
 
@@ -70,41 +71,36 @@ jobs:
 
           if ! grep -q "amazon-appstore-sdk-3.0.9.jar" "$BUILD_GRADLE"
           then
-
             python3 - <<'PY'
-          from pathlib import Path
+from pathlib import Path
 
-          path = Path(
-              "android/app/build.gradle"
-          )
+path = Path("android/app/build.gradle")
+text = path.read_text()
 
-          text = path.read_text()
+needle = "dependencies {"
 
-          needle = "dependencies {"
+if needle not in text:
+    raise SystemExit(
+        "Could not find dependencies block in android/app/build.gradle"
+    )
 
-          if needle not in text:
-              raise SystemExit(
-                  "Could not find dependencies block."
-              )
+replacement = (
+    needle
+    + "\n"
+    + "    implementation files('libs/amazon-appstore-sdk-3.0.9.jar')"
+)
 
-          replacement = (
-              needle
-              + "\n"
-              + "    implementation files('libs/amazon-appstore-sdk-3.0.9.jar')"
-          )
+text = text.replace(
+    needle,
+    replacement,
+    1
+)
 
-          text = text.replace(
-              needle,
-              replacement,
-              1
-          )
-
-          path.write_text(text)
-          PY
-
+path.write_text(text)
+PY
           fi
 
-          cat "$BUILD_GRADLE"
+          grep -n "amazon-appstore-sdk" "$BUILD_GRADLE"
 
       - name: Patch Android manifest for Amazon IAP
         shell: bash
@@ -112,130 +108,107 @@ jobs:
           MANIFEST="android/app/src/main/AndroidManifest.xml"
 
           python3 - <<'PY'
-          from pathlib import Path
+from pathlib import Path
 
-          path = Path(
-              "android/app/src/main/AndroidManifest.xml"
-          )
+path = Path("android/app/src/main/AndroidManifest.xml")
+text = path.read_text()
 
-          text = path.read_text()
+permission = (
+    '<uses-permission '
+    'android:name="com.amazon.inapp.purchasing.Permission.NOTIFY" />'
+)
 
-          permission = (
-              '<uses-permission '
-              'android:name="com.amazon.inapp.purchasing.Permission.NOTIFY" />'
-          )
+queries = """    <queries>
+        <package android:name="com.amazon.venezia" />
+        <package android:name="com.amazon.sdktestclient" />
+    </queries>"""
 
-          if permission not in text:
-              text = text.replace(
-                  "<application",
-                  permission + "\n\n    <application",
-                  1
-              )
+receiver = """        <receiver
+            android:name="com.amazon.device.iap.ResponseReceiver"
+            android:exported="true"
+            android:permission="com.amazon.inapp.purchasing.Permission.NOTIFY">
+            <intent-filter>
+                <action android:name="com.amazon.inapp.purchasing.NOTIFY" />
+            </intent-filter>
+        </receiver>"""
 
-          receiver = """<receiver
-              android:name="com.amazon.device.iap.ResponseReceiver"
-              android:exported="true"
-              android:permission="com.amazon.inapp.purchasing.Permission.NOTIFY">
-              <intent-filter>
-                  <action android:name="com.amazon.inapp.purchasing.NOTIFY" />
-              </intent-filter>
-          </receiver>"""
+if permission not in text:
+    text = text.replace(
+        "<application",
+        permission + "\n\n    <application",
+        1
+    )
 
-          if "com.amazon.device.iap.ResponseReceiver" not in text:
-              text = text.replace(
-                  "</application>",
-                  receiver + "\n\n    </application>",
-                  1
-              )
+if "<queries>" not in text:
+    text = text.replace(
+        "<application",
+        queries + "\n\n    <application",
+        1
+    )
+else:
+    if "com.amazon.venezia" not in text:
+        text = text.replace(
+            "<queries>",
+            "<queries>\n        <package android:name=\"com.amazon.venezia\" />",
+            1
+        )
 
-          queries = """<queries>
-              <package android:name="com.amazon.venezia" />
-              <package android:name="com.amazon.sdktestclient" />
-          </queries>"""
+    if "com.amazon.sdktestclient" not in text:
+        text = text.replace(
+            "</queries>",
+            '        <package android:name="com.amazon.sdktestclient" />\n    </queries>',
+            1
+        )
 
-          if "<queries>" not in text:
-              text = text.replace(
-                  "<application",
-                  queries + "\n\n    <application",
-                  1
-              )
-          else:
-              if (
-                  "com.amazon.venezia"
-                  not in text
-              ):
-                  text = text.replace(
-                      "</queries>",
-                      '    <package android:name="com.amazon.venezia" />\n    </queries>',
-                      1
-                  )
+if "com.amazon.device.iap.ResponseReceiver" not in text:
+    application_end = text.rfind("</application>")
 
-              if (
-                  "com.amazon.sdktestclient"
-                  not in text
-              ):
-                  text = text.replace(
-                      "</queries>",
-                      '    <package android:name="com.amazon.sdktestclient" />\n    </queries>',
-                      1
-                  )
+    if application_end == -1:
+        raise SystemExit(
+            "Could not find </application> in AndroidManifest.xml"
+        )
 
-          path.write_text(text)
-          PY
+    text = (
+        text[:application_end]
+        + receiver
+        + "\n"
+        + text[application_end:]
+    )
+
+path.write_text(text)
+PY
 
           cat "$MANIFEST"
 
-      - name: Verify Amazon manifest
+      - name: Verify Amazon Android files
         run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          test -f android/app/src/main/java/com/cartcue/app/AmazonIAPPlugin.java
+          test -f android/app/src/main/java/com/cartcue/app/MainActivity.java
+          test -f android/app/libs/amazon-appstore-sdk-3.0.9.jar
+          test -f android/app/src/main/assets/AppstoreAuthenticationKey.pem
 
-          grep -q \
-            "com.amazon.inapp.purchasing.Permission.NOTIFY" \
-            "$MANIFEST"
+          grep -q "com.amazon.device.iap.ResponseReceiver" \
+            android/app/src/main/AndroidManifest.xml
 
-          grep -q \
-            "com.amazon.device.iap.ResponseReceiver" \
-            "$MANIFEST"
+          grep -q "com.amazon.venezia" \
+            android/app/src/main/AndroidManifest.xml
 
-          grep -q \
-            'android:exported="true"' \
-            "$MANIFEST"
+          grep -q "com.amazon.sdktestclient" \
+            android/app/src/main/AndroidManifest.xml
 
-          grep -q \
-            "com.amazon.venezia" \
-            "$MANIFEST"
-
-          grep -q \
-            "com.amazon.sdktestclient" \
-            "$MANIFEST"
-
-      - name: Verify Amazon Java files
-        run: |
-          test -f \
-            android/app/src/main/java/com/cartcue/app/AmazonIAPPlugin.java
-
-          test -f \
-            android/app/src/main/java/com/cartcue/app/MainActivity.java
-
-          test -f \
-            android/app/libs/amazon-appstore-sdk-3.0.9.jar
-
-          test -f \
-            android/app/src/main/assets/AppstoreAuthenticationKey.pem
-
-      - name: Build Android APK
+      - name: Build Android debug APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew clean assembleDebug
 
       - name: Verify APK exists
         run: |
-          test -f \
-            android/app/build/outputs/apk/debug/app-debug.apk
+          test -f android/app/build/outputs/apk/debug/app-debug.apk
+          ls -lh android/app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Upload APK
+      - name: Upload Amazon test APK
         uses: actions/upload-artifact@v4
         with:
-          name: cartcue-amazon-iap-fixed
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: cartcue-amazon-iap-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk  
