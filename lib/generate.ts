@@ -23,7 +23,7 @@ Target audience: ${input.targetAudience || "General Amazon shoppers"}
 Main benefit: ${input.mainBenefit || "Not provided"}
 Content style: ${input.style}
 Tone: ${input.tone}
-Include affiliate disclosure: ${input.includeDisclosure? "yes" : "no"}
+Include affiliate disclosure: ${input.includeDisclosure ? "yes" : "no"}
 
 Return JSON with this exact structure:
 {
@@ -80,15 +80,19 @@ async function generateWithAI(
 
   // FORCE keep payment link and product name even if AI forgets
   const kit = instagramKitSchema.parse(parsed) as any;
-  kit.affiliateLink = input.affiliateUrl || input.amazonUrl || parsed.affiliateLink || "";
+  kit.affiliateLink =
+    input.affiliateUrl || input.amazonUrl || parsed.affiliateLink || "";
   kit.amazonUrl = input.amazonUrl || parsed.amazonUrl || "";
-  kit.productName = input.productName || parsed.productName || "Amazon Product";
+  kit.productName =
+    input.productName || parsed.productName || "Amazon Product";
   kit.price = input.price || parsed.price || "";
 
   return kit as InstagramKit;
 }
 
-export async function generateKit(input: GeneratorInput): Promise<InstagramKit> {
+export async function generateKit(
+  input: GeneratorInput
+): Promise<InstagramKit> {
   const key = process.env.OPENAI_API_KEY;
 
   if (key) {
@@ -103,8 +107,9 @@ export async function generateKit(input: GeneratorInput): Promise<InstagramKit> 
   const fallback = generateFallback(input) as any;
   fallback.affiliateLink = input.affiliateUrl || input.amazonUrl || "";
   fallback.amazonUrl = input.amazonUrl || "";
-  fallback.productName = input.productName || fallback.productName || "Amazon Product";
+  fallback.productName =
+    input.productName || fallback.productName || "Amazon Product";
   fallback.price = input.price || "";
 
   return fallback as InstagramKit;
-      }
+}
