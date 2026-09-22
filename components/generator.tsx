@@ -203,4 +203,4 @@ export default function Generator() {
       </main>
     </div>
   );
-        }
+}
