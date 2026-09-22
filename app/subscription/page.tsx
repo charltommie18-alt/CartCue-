@@ -335,4 +335,4 @@ export default function SubscriptionPage() {
       </main>
     </div>
   );
-            }
+            
