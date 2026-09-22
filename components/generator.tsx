@@ -16,52 +16,52 @@ export default function Generator() {
     const st = getPlanState();
     setPlan(st);
     setTrial(getTrialTimeLeft());
-    
+
     const id = setInterval(() => {
       setTrial(getTrialTimeLeft());
       setPlan(getPlanState());
     }, 60000);
-    
+
     return () => clearInterval(id);
   }, []);
 
-  const isExpired = plan?.plan === 'free' && plan?.generationsLeft === 0;
-  const isPro = plan?.plan === 'pro';
+  const isExpired = plan?.plan === "free" && plan?.generationsLeft === 0;
+  const isPro = plan?.plan === "pro";
 
   async function handleGenerate(data: any) {
     const state = getPlanState();
     setPlan(state);
 
-    if (state.plan === 'free' && state.generationsLeft === 0) {
+    if (state.plan === "free" && state.generationsLeft === 0) {
       setError("Trial expired. Please subscribe to continue.");
       return;
     }
 
     setLoading(true);
     setError(null);
-    
+
     try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
       });
-      
+
       const json = await res.json();
-      
+
       if (!res.ok) {
-        throw new Error(json.error || 'Generation failed');
+        throw new Error(json.error || "Generation failed");
       }
-      
+
       if (json.kit) {
         setKit(json.kit);
         consumeGeneration();
         setPlan(getPlanState());
       } else {
-        throw new Error(json.error || 'Generation failed');
+        throw new Error(json.error || "Generation failed");
       }
     } catch (e: any) {
-      setError(e.message || 'Generation failed');
+      setError(e.message || "Generation failed");
     } finally {
       setLoading(false);
     }
@@ -69,7 +69,6 @@ export default function Generator() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="sticky top-0 z-50 border-b border-gray-200 bg-white/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
           <h1 className="text-2xl font-bold">
@@ -77,9 +76,14 @@ export default function Generator() {
           </h1>
           <div className="flex items-center gap-4 text-sm">
             <span className="text-orange-600 font-medium">
-              {isPro ? 'Pro ✓' : `Trial: ${trial.hours}h ${trial.minutes}m left`}
+              {isPro
+                ? "Pro ✓"
+                : `Trial: ${trial.hours}h ${trial.minutes}m left`}
             </span>
-            <a href="/saved" className="text-gray-600 hover:text-gray-900 font-medium">
+            <a
+              href="/saved"
+              className="text-gray-600 hover:text-gray-900 font-medium"
+            >
               Saved
             </a>
           </div>
@@ -87,12 +91,16 @@ export default function Generator() {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6 space-y-6">
-        {/* Trial Banner */}
         {!isPro && !isExpired && (
           <div className="rounded-xl bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 p-4 text-center">
             <p className="text-sm text-orange-800">
-              🎁 <span className="font-semibold">3-Day Free Trial Active</span> - {trial.hours}h {trial.minutes}m left
-              <a href="/subscription" className="ml-2 font-bold text-orange-600 underline hover:text-orange-700">
+              🎁{" "}
+              <span className="font-semibold">Free Trial Active</span> -{" "}
+              {trial.hours}h {trial.minutes}m left
+              <a
+                href="/subscription"
+                className="ml-2 font-bold text-orange-600 underline hover:text-orange-700"
+              >
                 Go Pro
               </a>
             </p>
@@ -102,8 +110,11 @@ export default function Generator() {
         {isExpired && (
           <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-center">
             <p className="text-sm text-red-800">
-               Trial expired -{" "}
-              <a href="/subscription" className="font-bold text-red-600 underline hover:text-red-700">
+              Trial expired -{" "}
+              <a
+                href="/subscription"
+                className="font-bold text-red-600 underline hover:text-red-700"
+              >
                 Subscribe $4.99/mo to unlock
               </a>
             </p>
@@ -116,49 +127,52 @@ export default function Generator() {
           </div>
         )}
 
-        {/* Workflow Section */}
+        {/* Workflow — neutral labels only (no third-party trademarks) */}
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-gray-900">Workflow</h2>
-            <button className="rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
-              Customize links
-            </button>
+            <a
+              href="/subscription"
+              className="rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+            >
+              Manage plan
+            </a>
           </div>
           <div className="flex flex-wrap gap-3">
             <a
-              href="https://amazon.com"
+              href="https://www.amazon.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center rounded-full bg-yellow-400 px-6 py-3 text-sm font-bold text-gray-900 hover:bg-yellow-500 transition shadow-sm"
+              className="inline-flex items-center rounded-full bg-neutral-800 px-6 py-3 text-sm font-bold text-white hover:bg-neutral-700 transition shadow-sm"
             >
-              Open Amazon
+              Open product store
             </a>
             <a
-              href="https://instagram.com"
+              href="https://www.instagram.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center rounded-full bg-black px-6 py-3 text-sm font-bold text-white hover:bg-gray-800 transition shadow-sm"
+              className="inline-flex items-center rounded-full bg-neutral-200 px-6 py-3 text-sm font-bold text-neutral-900 hover:bg-neutral-300 transition shadow-sm"
             >
-              Open Instagram
+              Open social feed
             </a>
           </div>
+          <p className="mt-3 text-xs text-gray-500">
+            Links open in your browser. You can change them later in settings.
+          </p>
         </div>
 
-        {/* Main Content Grid */}
         <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
-          {/* Product Form */}
-          <ProductForm onGenerate={handleGenerate} loading={loading} disabled={isExpired} />
+          <ProductForm
+            onGenerate={handleGenerate}
+            loading={loading}
+            disabled={isExpired}
+          />
 
-          {/* Output Section */}
           <div>
             {kit && !loading && (
-              <OutputTabs 
-                kit={kit} 
-                onSave={() => {}} 
-                saved={false} 
-              />
+              <OutputTabs kit={kit} onSave={() => {}} saved={false} />
             )}
-            
+
             {!kit && !loading && !error && (
               <div className="h-full min-h-[400px] rounded-2xl border-2 border-dashed border-gray-300 bg-white/50 p-8 flex flex-col items-center justify-center text-center">
                 <div className="text-6xl mb-4">📦</div>
@@ -166,11 +180,12 @@ export default function Generator() {
                   Ready to Generate
                 </h3>
                 <p className="text-sm text-gray-500 max-w-sm">
-                  Fill in the product details and click "Generate Content" to create Instagram-ready posts with Amazon affiliate links.
+                  Enter product details and generate social-ready content kits
+                  with affiliate links.
                 </p>
               </div>
             )}
-            
+
             {loading && (
               <div className="h-full min-h-[400px] rounded-2xl border border-gray-200 bg-white p-8 flex flex-col items-center justify-center">
                 <div className="animate-pulse flex flex-col items-center">
@@ -178,7 +193,9 @@ export default function Generator() {
                   <div className="h-4 w-48 bg-gray-200 rounded mb-2"></div>
                   <div className="h-3 w-32 bg-gray-200 rounded"></div>
                 </div>
-                <p className="mt-4 text-sm text-gray-600 font-medium">Generating with Amazon photo...</p>
+                <p className="mt-4 text-sm text-gray-600 font-medium">
+                  Generating product kit…
+                </p>
               </div>
             )}
           </div>
@@ -186,4 +203,4 @@ export default function Generator() {
       </main>
     </div>
   );
-}
+        }
