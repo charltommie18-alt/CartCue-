@@ -154,7 +154,7 @@ function extractAmazonImageFromHtml(html: string): string | null {
 
   // Direct Amazon image URLs
   const directImageRegex =
-    /https:\/\/m\.media-amazon\.com\/images\/I\/[A-Za-z0-9._%~-]+/gi;
+    /https:\/\/m\.media-amazon\.com\/images\/I\/[A-Za-z0-9._%\~-]+/gi;
 
   let directMatch: RegExpExecArray | null;
 
@@ -231,9 +231,7 @@ async function getAmazonProductImage(
       asin +
       ".01.LZZZZZZZ.jpg",
 
-    "https://images.amazon.com/images/P/" +
-      asin +
-      ".01.LZZZZZZZ.jpg",
+    "https://images.amazon.com/images/P/" + asin + ".01.LZZZZZZZ.jpg",
   ];
 
   for (let i = 0; i < fallbackImages.length; i++) {
@@ -263,12 +261,8 @@ async function getAmazonProductImage(
   return null;
 }
 
-function buildAffiliateLink(
-  resolvedUrl: string,
-  asin: string
-): string {
-  const tag =
-    process.env.AMAZON_AFFILIATE_TAG || "ctfun-20";
+function buildAffiliateLink(resolvedUrl: string, asin: string): string {
+  const tag = process.env.AMAZON_AFFILIATE_TAG || "ctfun-20";
 
   try {
     const url = new URL(resolvedUrl);
@@ -289,17 +283,11 @@ function buildAffiliateLink(
   );
 }
 
-function createProductKeywords(
-  productName: string
-): string {
-  return productName
-    ? productName.trim().toLowerCase()
-    : "amazon product";
+function createProductKeywords(productName: string): string {
+  return productName ? productName.trim().toLowerCase() : "amazon product";
 }
 
-function createCaptions(
-  productKeywords: string
-): string[] {
+function createCaptions(productKeywords: string): string[] {
   const isWatch =
     productKeywords.indexOf("watch") !== -1 ||
     productKeywords.indexOf("smartwatch") !== -1;
@@ -331,17 +319,13 @@ function createCaptions(
   ];
 }
 
-function createHashtags(
-  productKeywords: string
-): string[] {
+function createHashtags(productKeywords: string): string[] {
   const cleanProductTag = productKeywords
     .replace(/[^a-zA-Z0-9]/g, "")
     .substring(0, 50);
 
   return [
-    cleanProductTag
-      ? "#" + cleanProductTag
-      : "#AmazonProduct",
+    cleanProductTag ? "#" + cleanProductTag : "#AmazonProduct",
     "#AmazonFinds",
     "#TechDeals",
     "#MustHave",
@@ -359,14 +343,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     const productName =
-      typeof body.productName === "string"
-        ? body.productName.trim()
-        : "";
+      typeof body.productName === "string" ? body.productName.trim() : "";
 
     const amazonUrl =
-      typeof body.amazonUrl === "string"
-        ? body.amazonUrl.trim()
-        : "";
+      typeof body.amazonUrl === "string" ? body.amazonUrl.trim() : "";
 
     if (!amazonUrl) {
       return NextResponse.json(
@@ -379,19 +359,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(
-      "Original Amazon URL:",
-      amazonUrl
-    );
+    console.log("Original Amazon URL:", amazonUrl);
 
     // Resolve amzn.to link.
-    const resolvedUrl =
-      await resolveShortUrl(amazonUrl);
+    const resolvedUrl = await resolveShortUrl(amazonUrl);
 
-    console.log(
-      "Resolved Amazon URL:",
-      resolvedUrl
-    );
+    console.log("Resolved Amazon URL:", resolvedUrl);
 
     // Get ASIN from resolved URL.
     let asin = extractASIN(resolvedUrl);
@@ -416,53 +389,28 @@ export async function POST(req: NextRequest) {
     console.log("Amazon ASIN:", asin);
 
     // Find the CORRECT image for this product.
-    const productImage =
-      await getAmazonProductImage(
-        resolvedUrl,
-        asin
-      );
+    const productImage = await getAmazonProductImage(resolvedUrl, asin);
 
     if (!productImage) {
-      console.warn(
-        "No Amazon image found for ASIN:",
-        asin
-      );
+      console.warn("No Amazon image found for ASIN:", asin);
     }
 
-    const productKeywords =
-      createProductKeywords(productName);
+    const productKeywords = createProductKeywords(productName);
 
-    const affiliateLink =
-      buildAffiliateLink(
-        resolvedUrl,
-        asin
-      );
+    const affiliateLink = buildAffiliateLink(resolvedUrl, asin);
 
     return NextResponse.json({
       kit: {
-        productName:
-          productName || "Amazon Product",
-
-        productImage:
-          productImage || "",
-
+        productName: productName || "Amazon Product",
+        productImage: productImage || "",
         asin: asin,
-
-        affiliateLink:
-          affiliateLink,
-
-        captions:
-          createCaptions(productKeywords),
-
-        hashtags:
-          createHashtags(productKeywords),
+        affiliateLink: affiliateLink,
+        captions: createCaptions(productKeywords),
+        hashtags: createHashtags(productKeywords),
       },
     });
   } catch (error) {
-    console.error(
-      "CartCue generation API error:",
-      error
-    );
+    console.error("CartCue generation API error:", error);
 
     return NextResponse.json(
       {
@@ -474,4 +422,4 @@ export async function POST(req: NextRequest) {
       }
     );
   }
-    }
+        }
