@@ -1,71 +1,40 @@
 import { NextResponse } from "next/server";
 
-const AMAZON_PARENT_SKU =
-  "CartCue_monthly_sub";
-
-const AMAZON_TERM_SKU =
-  "CartCue_monthly_term";
+const AMAZON_PARENT_SKU = "CartCue_monthly_sub";
+const AMAZON_TERM_SKU = "CartCue_monthly_term";
 
 type AmazonRvsResponse = {
   autoRenewing?: boolean;
-
   cancelDate?: number | null;
-
   freeTrialEndDate?: number | null;
-
   gracePeriodEndDate?: number | null;
-
   renewalDate?: number | null;
-
   purchaseDate?: number | null;
-
   receiptId?: string;
-
   productId?: string;
-
   productType?: string;
-
   term?: string | null;
-
   termSku?: string | null;
-
   testTransaction?: boolean;
 };
 
-function encodePart(
-  value: string
-) {
+function encodePart(value: string) {
   return encodeURIComponent(value);
 }
 
-export async function POST(
-  request: Request
-) {
+export async function POST(request: Request) {
   try {
-    const body =
-      await request.json();
+    const body = await request.json();
 
-    const receiptId =
-      String(
-        body?.receiptId || ""
-      ).trim();
-
-    const userId =
-      String(
-        body?.userId || ""
-      ).trim();
-
-    const requestedSku =
-      String(
-        body?.sku || ""
-      ).trim();
+    const receiptId = String(body?.receiptId || "").trim();
+    const userId = String(body?.userId || "").trim();
+    const requestedSku = String(body?.sku || "").trim();
 
     if (!receiptId) {
       return NextResponse.json(
         {
           active: false,
-          error:
-            "Missing Amazon receipt ID.",
+          error: "Missing Amazon receipt ID.",
         },
         { status: 400 }
       );
@@ -75,16 +44,13 @@ export async function POST(
       return NextResponse.json(
         {
           active: false,
-          error:
-            "Missing Amazon user ID.",
+          error: "Missing Amazon user ID.",
         },
         { status: 400 }
       );
     }
 
-    const secret =
-      process.env
-        .AMAZON_RVS_SHARED_SECRET;
+    const secret = process.env.AMAZON_RVS_SHARED_SECRET;
 
     if (!secret) {
       console.error(
@@ -102,10 +68,7 @@ export async function POST(
     }
 
     const mode =
-      process.env.AMAZON_RVS_MODE ===
-      "sandbox"
-        ? "sandbox/"
-        : "";
+      process.env.AMAZON_RVS_MODE === "sandbox" ? "sandbox/" : "";
 
     const url =
       "https://appstore-sdk.amazon.com/" +
@@ -117,25 +80,15 @@ export async function POST(
       "/receiptId/" +
       encodePart(receiptId);
 
-    const amazonResponse =
-      await fetch(
-        url,
-        {
-          method: "GET",
+    const amazonResponse = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
 
-          headers: {
-            Accept:
-              "application/json",
-          },
-
-          cache: "no-store",
-        }
-      );
-
-    if (
-      amazonResponse.status ===
-      410
-    ) {
+    if (amazonResponse.status === 410) {
       return NextResponse.json({
         active: false,
         canceled: true,
@@ -145,8 +98,7 @@ export async function POST(
     }
 
     if (!amazonResponse.ok) {
-      const text =
-        await amazonResponse.text();
+      const text = await amazonResponse.text();
 
       console.error(
         "Amazon RVS error:",
@@ -157,59 +109,38 @@ export async function POST(
       return NextResponse.json(
         {
           active: false,
-          error:
-            "Amazon could not verify the receipt.",
-          amazonStatus:
-            amazonResponse.status,
+          error: "Amazon could not verify the receipt.",
+          amazonStatus: amazonResponse.status,
         },
         { status: 502 }
       );
     }
 
-    const receipt =
-      (await amazonResponse.json()) as
-        AmazonRvsResponse;
+    const receipt = (await amazonResponse.json()) as AmazonRvsResponse;
 
-    if (
-      receipt.productType !==
-      "SUBSCRIPTION"
-    ) {
+    if (receipt.productType !== "SUBSCRIPTION") {
       return NextResponse.json(
         {
           active: false,
-          error:
-            "The Amazon receipt is not a subscription.",
+          error: "The Amazon receipt is not a subscription.",
         },
         { status: 400 }
       );
     }
 
-    /*
-     * The subscription must belong to the
-     * CartCue subscription.
-     */
     const skuMatches =
-      receipt.productId ===
-        AMAZON_PARENT_SKU ||
-      receipt.productId ===
-        AMAZON_TERM_SKU ||
-      receipt.termSku ===
-        AMAZON_PARENT_SKU ||
-      receipt.termSku ===
-        AMAZON_TERM_SKU ||
+      receipt.productId === AMAZON_PARENT_SKU ||
+      receipt.productId === AMAZON_TERM_SKU ||
+      receipt.termSku === AMAZON_PARENT_SKU ||
+      receipt.termSku === AMAZON_TERM_SKU ||
       !requestedSku;
 
     if (!skuMatches) {
-      console.error(
-        "Amazon SKU mismatch:",
-        {
-          requestedSku,
-          productId:
-            receipt.productId,
-          termSku:
-            receipt.termSku,
-        }
-      );
+      console.error("Amazon SKU mismatch:", {
+        requestedSku,
+        productId: receipt.productId,
+        termSku: receipt.termSku,
+      });
 
       return NextResponse.json(
         {
@@ -221,102 +152,44 @@ export async function POST(
       );
     }
 
-    const now =
-      Date.now();
+    const now = Date.now();
+    const cancelDate = receipt.cancelDate ?? null;
+    const renewalDate = receipt.renewalDate ?? null;
+    const trialEnd = receipt.freeTrialEndDate ?? null;
+    const graceEnd = receipt.gracePeriodEndDate ?? null;
 
-    const cancelDate =
-      receipt.cancelDate ??
-      null;
-
-    const renewalDate =
-      receipt.renewalDate ??
-      null;
-
-    const trialEnd =
-      receipt.freeTrialEndDate ??
-      null;
-
-    const graceEnd =
-      receipt.gracePeriodEndDate ??
-      null;
-
-    /*
-     * If Amazon supplies an end date, use the
-     * latest applicable access date.
-     */
     const accessEnd =
-      cancelDate ||
-      renewalDate ||
-      trialEnd ||
-      graceEnd ||
-      null;
+      cancelDate || renewalDate || trialEnd || graceEnd || null;
 
-    const active =
-      !accessEnd ||
-      accessEnd > now;
+    const active = !accessEnd || accessEnd > now;
 
     const autoRenewing =
-      active &&
-      receipt.autoRenewing !== false &&
-      !cancelDate;
+      active && receipt.autoRenewing !== false && !cancelDate;
 
     return NextResponse.json({
       active,
-
-      canceled:
-        !!cancelDate &&
-        cancelDate <= now,
-
+      canceled: !!cancelDate && cancelDate <= now,
       autoRenewing,
-
-      receiptId:
-        receipt.receiptId ||
-        receiptId,
-
-      productId:
-        receipt.productId ||
-        null,
-
-      termSku:
-        receipt.termSku ||
-        null,
-
-      purchaseDate:
-        receipt.purchaseDate ||
-        null,
-
+      receiptId: receipt.receiptId || receiptId,
+      productId: receipt.productId || null,
+      termSku: receipt.termSku || null,
+      purchaseDate: receipt.purchaseDate || null,
       renewalDate,
-
       cancelDate,
-
-      freeTrialEndDate:
-        trialEnd,
-
-      gracePeriodEndDate:
-        graceEnd,
-
-      term:
-        receipt.term ||
-        null,
-
-      testTransaction:
-        receipt.testTransaction ===
-        true,
+      freeTrialEndDate: trialEnd,
+      gracePeriodEndDate: graceEnd,
+      term: receipt.term || null,
+      testTransaction: receipt.testTransaction === true,
     });
-
   } catch (error) {
-    console.error(
-      "Amazon verification error:",
-      error
-    );
+    console.error("Amazon verification error:", error);
 
     return NextResponse.json(
       {
         active: false,
-        error:
-          "Unexpected Amazon verification error.",
+        error: "Unexpected Amazon verification error.",
       },
       { status: 500 }
     );
   }
-          }
+  }
