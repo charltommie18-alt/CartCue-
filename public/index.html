@@ -40,19 +40,15 @@
 <body>
   <div class="card">
     <h1>CartCue</h1>
-    <p>Turn Amazon products into Instagram-ready content kits.</p>
+    <p>Turn product links into social-ready content kits.</p>
     <p id="status">Loading CartCue…</p>
     <p>
       <a class="button" id="openLink" href="https://cart-cue.vercel.app/">Open CartCue</a>
     </p>
   </div>
   <script>
-    // When running inside the Capacitor Android shell this page is only a
-    // fallback. The real content is loaded from capacitor.config.ts server.url.
-    // Keep the URL consistent with capacitor.config.ts.
     var TARGET = "https://cart-cue.vercel.app/";
 
-    // Prefer staying inside the WebView. Do not use window.open / target=_blank.
     function go() {
       location.replace(TARGET);
     }
@@ -63,8 +59,6 @@
       go();
     });
 
-    // Auto-redirect after a short delay so the native bridge has time to inject
-    // when this page is used as the initial load.
     setTimeout(function () {
       document.getElementById("status").textContent = "Opening CartCue…";
       go();
