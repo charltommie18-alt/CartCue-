@@ -37,8 +37,19 @@ export default function SubscriptionPage() {
         );
       }
 
-      const newState = getPlanState();
-      setState(newState);
+      saveAmazonSubscription({
+        active: true,
+        autoRenewing: result.verification.autoRenewing !== false,
+        renewalDate: result.verification.renewalDate || null,
+        cancelDate: result.verification.cancelDate || null,
+        freeTrialEndDate: result.verification.freeTrialEndDate || null,
+        gracePeriodEndDate:
+          result.verification.gracePeriodEndDate || null,
+        receiptId: result.receiptId || null,
+        verifiedAt: Date.now(),
+      });
+
+      setState(getPlanState());
 
       setNotice(
         "Payment successful. Your CartCue Pro subscription is active."
@@ -51,7 +62,7 @@ export default function SubscriptionPage() {
         await restoreAmazonPurchase();
       } else if (!/cancel/i.test(message)) {
         setNotice(
-          `Amazon purchase could not be completed: ${message}`
+          `Purchase could not be completed: ${message}`
         );
       }
     } finally {
@@ -91,7 +102,7 @@ export default function SubscriptionPage() {
 
       if (!activeReceipt?.receiptId || !result?.userId) {
         setNotice(
-          "No active CartCue Amazon subscription was found."
+          "No active CartCue subscription was found."
         );
         return;
       }
@@ -128,14 +139,14 @@ export default function SubscriptionPage() {
       setState(getPlanState());
 
       setNotice(
-        "Your CartCue Pro subscription has been restored and verified by Amazon."
+        "Your CartCue Pro subscription has been restored and verified."
       );
     } catch (error) {
       const message =
         error instanceof Error ? error.message : String(error);
 
       setNotice(
-        `Could not restore the Amazon subscription: ${message}`
+        `Could not restore the subscription: ${message}`
       );
     } finally {
       setBusy(false);
@@ -144,7 +155,7 @@ export default function SubscriptionPage() {
 
   function handleManageSubscription() {
     setNotice(
-      "To cancel, open the Amazon Appstore and manage CartCue under your subscriptions. Cancelling there stops future Amazon billing."
+      "To cancel, open the Amazon Appstore and manage CartCue under your subscriptions. Cancelling there stops future billing."
     );
   }
 
@@ -252,7 +263,7 @@ export default function SubscriptionPage() {
               <li>Unlimited content kits</li>
               <li>All styles and tones</li>
               <li>AI captions</li>
-              <li>Amazon Appstore billing</li>
+              <li>Appstore billing</li>
             </ul>
 
             <button
@@ -262,8 +273,8 @@ export default function SubscriptionPage() {
               className="mt-6 w-full rounded-md bg-amber-400 px-4 py-2.5 text-sm font-semibold text-neutral-900 hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {busy
-                ? "Opening Amazon purchase…"
-                : "Subscribe with Amazon — $4.99/mo"}
+                ? "Opening purchase…"
+                : "Subscribe — $4.99/mo"}
             </button>
 
             <button
@@ -272,7 +283,7 @@ export default function SubscriptionPage() {
               disabled={busy}
               className="mt-2 w-full rounded-md px-4 py-2 text-xs font-medium text-neutral-600 hover:bg-neutral-100 disabled:opacity-50"
             >
-              Restore Amazon subscription
+              Restore subscription
             </button>
 
             <button
@@ -282,10 +293,6 @@ export default function SubscriptionPage() {
             >
               Manage / Cancel Subscription
             </button>
-
-            <p className="mt-3 text-center font-mono text-[11px] text-neutral-400">
-              SKU: {AMAZON_SUB_SKU}
-            </p>
           </div>
 
           <div className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm opacity-80">
@@ -303,7 +310,7 @@ export default function SubscriptionPage() {
             <ul className="mt-4 space-y-2 text-sm text-neutral-600">
               <li>Everything in Pro</li>
               <li>Bulk generation</li>
-              <li>Multiple Instagram profiles</li>
+              <li>Multiple social profiles</li>
               <li>Priority support</li>
             </ul>
 
@@ -314,25 +321,24 @@ export default function SubscriptionPage() {
         </div>
 
         <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-center text-xs text-neutral-600">
-          <p className="font-semibold">Amazon subscription</p>
+          <p className="font-semibold">Appstore subscription</p>
 
           <p className="mt-1">
-            The CartCue Pro subscription is purchased and billed
-            through the Amazon Appstore.
+            CartCue Pro is purchased and billed through the Amazon
+            Appstore.
           </p>
 
           <p className="mt-1">
-            If your Amazon subscription term includes a 7-day free
-            trial, Amazon applies that trial according to the
-            subscription configuration.
+            If your subscription term includes a free trial, it is
+            applied according to the subscription configuration.
           </p>
 
           <p className="mt-1">
-            You can manage or cancel your subscription through Amazon
-            Appstore subscription management.
+            Manage or cancel through Amazon Appstore subscription
+            management.
           </p>
         </div>
       </main>
     </div>
   );
-  }
+      }
