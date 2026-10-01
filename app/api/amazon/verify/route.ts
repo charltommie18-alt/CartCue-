@@ -67,12 +67,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const mode =
-      process.env.AMAZON_RVS_MODE === "sandbox" ? "sandbox/" : "";
-
-    const url =
+    const buildUrl = (sandbox: boolean) =>
       "https://appstore-sdk.amazon.com/" +
-      mode +
+      (sandbox ? "sandbox/" : "") +
       "version/1.0/verifyReceiptId/developer/" +
       encodePart(secret) +
       "/user/" +
@@ -80,13 +77,24 @@ export async function POST(request: Request) {
       "/receiptId/" +
       encodePart(receiptId);
 
-    const amazonResponse = await fetch(url, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
+    const callRvs = (sandbox: boolean) =>
+      fetch(buildUrl(sandbox), {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      });
+
+    // Try the configured mode first. If Amazon rejects the receipt
+    // (test/review receipts are sandbox receipts), try the other one.
+    const preferSandbox = process.env.AMAZON_RVS_MODE === "sandbox";
+    let amazonResponse = await callRvs(preferSandbox);
+
+    if (!amazonResponse.ok && amazonResponse.status !== 410) {
+      const retry = await callRvs(!preferSandbox);
+      if (retry.ok || retry.status === 410) {
+        amazonResponse = retry;
+      }
+    }
 
     if (amazonResponse.status === 410) {
       return NextResponse.json({
@@ -192,4 +200,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
+        }
