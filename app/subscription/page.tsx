@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import AmazonIAP from "@/lib/amazon-iap";
 
@@ -17,10 +17,33 @@ export default function SubscriptionPage() {
   const [state, setState] = useState<PlanState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const noticeRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setState(getPlanState());
   }, []);
+
+  useEffect(() => {
+    if (notice && noticeRef.current) {
+      noticeRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  }, [notice]);
+
+  function friendlyError(message: string) {
+    if (/not implemented|not available|UNIMPLEMENTED/i.test(message)) {
+      return "Amazon purchasing is not available in this build of the app. Please install CartCue from the Amazon Appstore.";
+    }
+    if (message.toUpperCase().includes("INVALID_SKU")) {
+      return "This subscription is not available right now (INVALID_SKU). Please try again later.";
+    }
+    if (message.toUpperCase().includes("NOT_SUPPORTED")) {
+      return "Purchases are not supported on this device or Appstore version.";
+    }
+    return `Purchase could not be completed: ${message}`;
+  }
 
   async function handleAmazonPurchase() {
     if (busy) return;
@@ -61,9 +84,7 @@ export default function SubscriptionPage() {
       if (message.toUpperCase().includes("ALREADY_PURCHASED")) {
         await restoreAmazonPurchase();
       } else if (!/cancel/i.test(message)) {
-        setNotice(
-          `Purchase could not be completed: ${message}`
-        );
+        setNotice(friendlyError(message));
       }
     } finally {
       setBusy(false);
@@ -209,12 +230,6 @@ export default function SubscriptionPage() {
           </div>
         )}
 
-        {notice && (
-          <div className="rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-800 shadow-sm">
-            {notice}
-          </div>
-        )}
-
         <div className="grid gap-6 md:grid-cols-3">
           <div className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
             <h2 className="font-semibold text-neutral-900">
@@ -293,6 +308,16 @@ export default function SubscriptionPage() {
             >
               Manage / Cancel Subscription
             </button>
+
+            {notice && (
+              <div
+                ref={noticeRef}
+                role="status"
+                className="mt-3 rounded-md border border-orange-300 bg-orange-50 p-3 text-sm text-neutral-800"
+              >
+                {notice}
+              </div>
+            )}
           </div>
 
           <div className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm opacity-80">
@@ -341,4 +366,5 @@ export default function SubscriptionPage() {
       </main>
     </div>
   );
-      }
+    }
+        
