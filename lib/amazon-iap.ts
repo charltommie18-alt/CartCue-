@@ -2,8 +2,11 @@
 
 import { registerPlugin } from "@capacitor/core";
 
-export const AMAZON_PARENT_SKU = "CartCue_monthly_sub";
-export const AMAZON_SUBSCRIPTION_SKU = "CartCue_monthly_term";
+export const AMAZON_PARENT_SKU =
+  "CartCue_monthly_sub";
+
+export const AMAZON_SUBSCRIPTION_SKU =
+  "CartCue_monthly_term";
 
 type PurchaseResult = {
   success: boolean;
@@ -47,14 +50,20 @@ interface AmazonIAPPlugin {
 
   fulfillPurchase(options: {
     receiptId: string;
-    result?: "FULFILLED" | "UNAVAILABLE";
+    result?:
+      | "FULFILLED"
+      | "EXISTING_PURCHASE"
+      | "NOT_ELIGIBLE"
+      | "UNAVAILABLE";
   }): Promise<{
     success: boolean;
   }>;
 }
 
 const AmazonIAPNative =
-  registerPlugin<AmazonIAPPlugin>("AmazonIAP");
+  registerPlugin<AmazonIAPPlugin>(
+    "AmazonIAP"
+  );
 
 export async function purchase(
   input?:
@@ -62,8 +71,12 @@ export async function purchase(
     | {
         sku: string;
       }
-) {
-  let sku = AMAZON_SUBSCRIPTION_SKU;
+): Promise<PurchaseResult & {
+  userId?: string;
+  marketplace?: string;
+}> {
+  let sku =
+    AMAZON_SUBSCRIPTION_SKU;
 
   if (typeof input === "string") {
     sku = input;
@@ -74,27 +87,39 @@ export async function purchase(
     sku = input.sku;
   }
 
+  sku = sku.trim();
+
   if (!sku) {
     throw new Error(
       "Amazon subscription SKU is missing."
     );
   }
 
-  /*
-   * IMPORTANT:
-   *
-   * Do not block the button with a JavaScript
-   * platform check. The actual Amazon native
-   * plugin must receive the purchase request.
-   *
-   * If the native plugin is missing from the APK,
-   * the resulting error is shown to the user instead
-   * of making the button appear to do nothing.
-   */
-  const result =
-    await AmazonIAPNative.purchase({
-      sku,
-    });
+  let result: PurchaseResult;
+
+  try {
+    result =
+      await AmazonIAPNative.purchase({
+        sku,
+      });
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error);
+
+    if (
+      /plugin.*not.*implemented/i.test(
+        message
+      )
+    ) {
+      throw new Error(
+        "Amazon IAP native plugin is not included in this APK. Rebuild the Amazon version from the GitHub workflow."
+      );
+    }
+
+    throw error;
+  }
 
   if (!result?.success) {
     throw new Error(
@@ -102,14 +127,18 @@ export async function purchase(
     );
   }
 
-  let userId = result.userId;
-  let marketplace = result.marketplace;
+  let userId =
+    result.userId;
+
+  let marketplace =
+    result.marketplace;
 
   if (!userId) {
     const userData =
       await AmazonIAPNative.getUserData();
 
-    userId = userData.userId;
+    userId =
+      userData.userId;
 
     marketplace =
       marketplace ||
@@ -118,7 +147,9 @@ export async function purchase(
 
   return {
     ...result,
-    sku: result.sku || sku,
+    sku:
+      result.sku ||
+      sku,
     userId,
     marketplace,
   };
@@ -154,7 +185,8 @@ export async function fulfillPurchase(
 export async function verifyAmazonReceipt(
   receiptId: string,
   userId: string,
-  sku: string = AMAZON_SUBSCRIPTION_SKU
+  sku: string =
+    AMAZON_SUBSCRIPTION_SKU
 ) {
   if (!receiptId) {
     throw new Error(
@@ -187,8 +219,14 @@ export async function verifyAmazonReceipt(
       }
     );
 
-  const data =
-    await response.json();
+  let data: any;
+
+  try {
+    data =
+      await response.json();
+  } catch {
+    data = null;
+  }
 
   if (!response.ok) {
     throw new Error(
@@ -237,6 +275,11 @@ export async function subscribeToCartCue() {
     );
   }
 
+  /*
+   * Amazon requires notifyFulfillment().
+   * This is done only after server-side
+   * receipt verification succeeds.
+   */
   await fulfillPurchase(
     purchaseResult.receiptId
   );
