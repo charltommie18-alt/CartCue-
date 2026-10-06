@@ -37,53 +37,196 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Install Amazon Appstore SDK 3.0.9
+      - name: Configure Amazon Appstore SDK
+        shell: bash
         run: |
-          mkdir -p android/app/libs
-          curl -L --fail --retry 3 -o android/app/libs/amazon-appstore-sdk-3.0.9.jar https://repo1.maven.org/maven2/com/amazon/device/amazon-appstore-sdk/3.0.9/amazon-appstore-sdk-3.0.9.jar
-          test -s android/app/libs/amazon-appstore-sdk-3.0.9.jar
+          set -e
 
-      - name: Install Amazon authentication key
-        run: |
+          APP_GRADLE="android/app/build.gradle"
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+
+          test -f "$APP_GRADLE"
+          test -f "$MANIFEST"
+
+          # Amazon Appstore SDK 3.0.9
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("android/app/build.gradle")
+          text = path.read_text()
+
+          dependency = "implementation 'com.amazon.device:amazon-appstore-sdk:3.0.9'"
+
+          if dependency not in text:
+              marker = "dependencies {"
+              if marker not in text:
+                  raise SystemExit(
+                      "Could not find dependencies block in android/app/build.gradle"
+                  )
+
+              text = text.replace(
+                  marker,
+                  marker + "\n    " + dependency,
+                  1
+              )
+
+          # Amazon submission/update version.
+          # The original CartCue submission was versionCode 1.
+          # This build uses versionCode 2.
+          import re
+
+          text, count = re.subn(
+              r"versionCode\s+\d+",
+              "versionCode 2",
+              text,
+              count=1
+          )
+
+          if count == 0:
+              raise SystemExit(
+                  "Could not find versionCode in android/app/build.gradle"
+              )
+
+          text, count = re.subn(
+              r'versionName\s+"[^"]*"',
+              'versionName "0.1.1"',
+              text,
+              count=1
+          )
+
+          if count == 0:
+              raise SystemExit(
+                  "Could not find versionName in android/app/build.gradle"
+              )
+
+          path.write_text(text)
+          PY
+
+          # Copy Amazon public key.
           mkdir -p android/app/src/main/assets
           test -f amazon-iap/AppstoreAuthenticationKey.pem
-          cp amazon-iap/AppstoreAuthenticationKey.pem android/app/src/main/assets/AppstoreAuthenticationKey.pem
+          cp amazon-iap/AppstoreAuthenticationKey.pem \
+             android/app/src/main/assets/AppstoreAuthenticationKey.pem
 
-      - name: Install CartCue Amazon IAP plugin
-        run: |
+          # Copy the native Capacitor Amazon IAP bridge.
           mkdir -p android/app/src/main/java/com/cartcue/app
-          cp amazon-iap/AmazonIAPPlugin.java android/app/src/main/java/com/cartcue/app/AmazonIAPPlugin.java
-          cp amazon-iap/MainActivity.java android/app/src/main/java/com/cartcue/app/MainActivity.java
 
-      - name: Add Amazon SDK to Gradle
-        run: |
-          if ! grep -q "amazon-appstore-sdk-3.0.9.jar" android/app/build.gradle; then
-            sed -i "s/dependencies {/dependencies {\\n    implementation files('libs\\/amazon-appstore-sdk-3.0.9.jar')/" android/app/build.gradle
-          fi
-          grep -n "amazon-appstore-sdk" android/app/build.gradle
+          cp amazon-iap/AmazonIAPPlugin.java \
+             android/app/src/main/java/com/cartcue/app/AmazonIAPPlugin.java
+
+          cp amazon-iap/MainActivity.java \
+             android/app/src/main/java/com/cartcue/app/MainActivity.java
 
       - name: Patch Android manifest for Amazon IAP
+        shell: bash
         run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          if ! grep -q "com.amazon.inapp.purchasing.Permission.NOTIFY" "$MANIFEST"; then
-            sed -i 's/<application/<uses-permission android:name="com.amazon.inapp.purchasing.Permission.NOTIFY" \/>\n    <application/' "$MANIFEST"
-          fi
-          if ! grep -q "com.amazon.venezia" "$MANIFEST"; then
-            sed -i 's/<application/<queries>\n        <package android:name="com.amazon.venezia" \/>\n        <package android:name="com.amazon.sdktestclient" \/>\n    <\/queries>\n    <application/' "$MANIFEST"
-          fi
-          if ! grep -q "com.amazon.device.iap.ResponseReceiver" "$MANIFEST"; then
-            sed -i 's/<\/application>/        <receiver android:name="com.amazon.device.iap.ResponseReceiver" android:exported="true" android:permission="com.amazon.inapp.purchasing.Permission.NOTIFY"><intent-filter><action android:name="com.amazon.inapp.purchasing.NOTIFY" \/><\/intent-filter><\/receiver>\n    <\/application>/' "$MANIFEST"
-          fi
+          set -e
 
-      - name: Verify Amazon Android files
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path(
+              "android/app/src/main/AndroidManifest.xml"
+          )
+
+          text = path.read_text()
+
+          # Android 11+ package visibility required by Amazon.
+          if "com.amazon.venezia" not in text:
+              insert = """
+          <queries>
+              <package android:name="com.amazon.venezia" />
+              <package android:name="com.amazon.sdktestclient" />
+          </queries>
+          """
+
+              marker = "</manifest>"
+
+              if marker not in text:
+                  raise SystemExit(
+                      "AndroidManifest.xml is missing </manifest>"
+                  )
+
+              text = text.replace(
+                  marker,
+                  insert + "\n" + marker,
+                  1
+              )
+
+          # Amazon IAP notification permission.
+          permission = (
+              '<uses-permission '
+              'android:name="com.amazon.inapp.purchasing.Permission.NOTIFY" />'
+          )
+
+          if permission not in text:
+              marker = "<application"
+
+              if marker not in text:
+                  raise SystemExit(
+                      "AndroidManifest.xml is missing <application>"
+                  )
+
+              text = text.replace(
+                  marker,
+                  permission + "\n\n    " + marker,
+                  1
+              )
+
+          # Amazon ResponseReceiver.
+          receiver = """
+              <receiver
+                  android:name="com.amazon.device.iap.ResponseReceiver"
+                  android:exported="true"
+                  android:permission="com.amazon.inapp.purchasing.Permission.NOTIFY">
+                  <intent-filter>
+                      <action android:name="com.amazon.inapp.purchasing.NOTIFY" />
+                  </intent-filter>
+              </receiver>
+          """
+
+          if "com.amazon.device.iap.ResponseReceiver" not in text:
+              marker = "</application>"
+
+              if marker not in text:
+                  raise SystemExit(
+                      "AndroidManifest.xml is missing </application>"
+                  )
+
+              text = text.replace(
+                  marker,
+                  receiver + "\n" + marker,
+                  1
+              )
+
+          path.write_text(text)
+          PY
+
+      - name: Verify Amazon integration
+        shell: bash
         run: |
+          set -e
+
           test -f android/app/src/main/java/com/cartcue/app/AmazonIAPPlugin.java
           test -f android/app/src/main/java/com/cartcue/app/MainActivity.java
-          test -f android/app/libs/amazon-appstore-sdk-3.0.9.jar
           test -f android/app/src/main/assets/AppstoreAuthenticationKey.pem
-          grep -q "com.amazon.device.iap.ResponseReceiver" android/app/src/main/AndroidManifest.xml
-          grep -q "com.amazon.venezia" android/app/src/main/AndroidManifest.xml
-          grep -q "com.amazon.sdktestclient" android/app/src/main/AndroidManifest.xml
+
+          grep -q "amazon-appstore-sdk:3.0.9" \
+            android/app/build.gradle
+
+          grep -q "com.amazon.device.iap.ResponseReceiver" \
+            android/app/src/main/AndroidManifest.xml
+
+          grep -q "com.amazon.venezia" \
+            android/app/src/main/AndroidManifest.xml
+
+          grep -q "com.amazon.sdktestclient" \
+            android/app/src/main/AndroidManifest.xml
+
+          grep -q "com.amazon.inapp.purchasing.Permission.NOTIFY" \
+            android/app/src/main/AndroidManifest.xml
+
+          echo "Amazon IAP configuration verified."
 
       - name: Build Android debug APK
         run: |
