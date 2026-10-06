@@ -28,16 +28,14 @@ public class AmazonIAPPlugin
         extends Plugin
         implements PurchasingListener {
 
-    private final Map<String, PluginCall>
-            pendingPurchases =
+    private final Map<String, PluginCall> pendingPurchases =
             new HashMap<>();
 
     private PluginCall userDataCall;
 
     private PluginCall updatesCall;
 
-    private final List<Receipt>
-            restoredReceipts =
+    private final List<Receipt> restoredReceipts =
             new ArrayList<>();
 
     private String restoredUserId = "";
@@ -49,38 +47,47 @@ public class AmazonIAPPlugin
         super.load();
 
         /*
-         * Amazon requires the listener to be
-         * registered before IAP operations.
+         * Amazon requires the PurchasingListener to be
+         * registered before IAP requests are made.
          */
-        PurchasingService.registerListener(
-                getContext()
-                        .getApplicationContext(),
-                this
-        );
+        try {
+            PurchasingService.registerListener(
+                    getContext().getApplicationContext(),
+                    this
+            );
+
+            /*
+             * Enable Amazon pending purchases.
+             * This is required when supporting purchases
+             * that can remain pending for approval.
+             */
+            PurchasingService.enablePendingPurchases();
+
+        } catch (Exception error) {
+            android.util.Log.e(
+                    "CartCueAmazonIAP",
+                    "Amazon IAP initialization failed",
+                    error
+            );
+        }
     }
 
     @PluginMethod
-    public void purchase(
-            PluginCall call
-    ) {
-        String sku =
-                call.getString("sku");
+    public void purchase(PluginCall call) {
+        String sku = call.getString("sku");
 
-        if (
-                sku == null ||
-                sku.trim().isEmpty()
-        ) {
+        if (sku == null || sku.trim().isEmpty()) {
             call.reject(
                     "Missing Amazon subscription SKU."
             );
             return;
         }
 
+        final String cleanSku = sku.trim();
+
         try {
             RequestId requestId =
-                    PurchasingService.purchase(
-                            sku.trim()
-                    );
+                    PurchasingService.purchase(cleanSku);
 
             if (requestId == null) {
                 call.reject(
@@ -99,15 +106,13 @@ public class AmazonIAPPlugin
         } catch (Exception error) {
             call.reject(
                     "Amazon purchase could not be started: " +
-                    error.getMessage()
+                    safeMessage(error)
             );
         }
     }
 
     @PluginMethod
-    public void getUserData(
-            PluginCall call
-    ) {
+    public void getUserData(PluginCall call) {
         userDataCall = call;
 
         call.setKeepAlive(true);
@@ -119,28 +124,22 @@ public class AmazonIAPPlugin
 
             call.reject(
                     "Amazon user data request failed: " +
-                    error.getMessage()
+                    safeMessage(error)
             );
         }
     }
 
     @PluginMethod
-    public void restorePurchases(
-            PluginCall call
-    ) {
+    public void restorePurchases(PluginCall call) {
         startPurchaseUpdates(call);
     }
 
     @PluginMethod
-    public void syncPurchases(
-            PluginCall call
-    ) {
+    public void syncPurchases(PluginCall call) {
         startPurchaseUpdates(call);
     }
 
-    private void startPurchaseUpdates(
-            PluginCall call
-    ) {
+    private void startPurchaseUpdates(PluginCall call) {
         if (updatesCall != null) {
             call.reject(
                     "Amazon purchase synchronization is already running."
@@ -151,35 +150,27 @@ public class AmazonIAPPlugin
         updatesCall = call;
 
         restoredReceipts.clear();
-
         restoredUserId = "";
-
         restoredMarketplace = "";
 
         call.setKeepAlive(true);
 
         try {
-            PurchasingService.getPurchaseUpdates(
-                    true
-            );
+            PurchasingService.getPurchaseUpdates(true);
         } catch (Exception error) {
             updatesCall = null;
 
             call.reject(
                     "Amazon purchase updates failed: " +
-                    error.getMessage()
+                    safeMessage(error)
             );
         }
     }
 
     @PluginMethod
-    public void fulfillPurchase(
-            PluginCall call
-    ) {
+    public void fulfillPurchase(PluginCall call) {
         String receiptId =
-                call.getString(
-                        "receiptId"
-                );
+                call.getString("receiptId");
 
         String result =
                 call.getString(
@@ -187,10 +178,9 @@ public class AmazonIAPPlugin
                         "FULFILLED"
                 );
 
-        if (
-                receiptId == null ||
-                receiptId.trim().isEmpty()
-        ) {
+        if (receiptId == null ||
+                receiptId.trim().isEmpty()) {
+
             call.reject(
                     "Missing receipt ID."
             );
@@ -204,9 +194,7 @@ public class AmazonIAPPlugin
                     FulfillmentResult.valueOf(
                             result
                     );
-        } catch (
-                IllegalArgumentException error
-        ) {
+        } catch (IllegalArgumentException error) {
             call.reject(
                     "Invalid fulfillment result."
             );
@@ -215,12 +203,11 @@ public class AmazonIAPPlugin
 
         try {
             PurchasingService.notifyFulfillment(
-                    receiptId,
+                    receiptId.trim(),
                     fulfillment
             );
 
-            JSObject response =
-                    new JSObject();
+            JSObject response = new JSObject();
 
             response.put(
                     "success",
@@ -232,7 +219,7 @@ public class AmazonIAPPlugin
         } catch (Exception error) {
             call.reject(
                     "Amazon fulfillment failed: " +
-                    error.getMessage()
+                    safeMessage(error)
             );
         }
     }
@@ -249,33 +236,26 @@ public class AmazonIAPPlugin
                 response.getRequestStatus() ==
                 UserDataResponse.RequestStatus.SUCCESSFUL
         ) {
-            JSObject data =
-                    new JSObject();
+            JSObject data = new JSObject();
 
-            data.put(
-                    "userId",
-                    response
-                            .getUserData()
-                            .getUserId()
-            );
+            if (response.getUserData() != null) {
+                data.put(
+                        "userId",
+                        response.getUserData().getUserId()
+                );
 
-            data.put(
-                    "marketplace",
-                    response
-                            .getUserData()
-                            .getMarketplace()
-            );
+                data.put(
+                        "marketplace",
+                        response.getUserData().getMarketplace()
+                );
 
-            data.put(
-                    "countryCode",
-                    response
-                            .getUserData()
-                            .getCountryCode()
-            );
+                data.put(
+                        "countryCode",
+                        response.getUserData().getCountryCode()
+                );
+            }
 
-            userDataCall.resolve(
-                    data
-            );
+            userDataCall.resolve(data);
 
         } else {
             userDataCall.reject(
@@ -292,29 +272,35 @@ public class AmazonIAPPlugin
             ProductDataResponse response
     ) {
         /*
-         * The purchase flow does not need to
-         * wait for this callback.
+         * Product information is requested by MainActivity
+         * so Amazon can validate the configured SKUs.
+         *
+         * The purchase call itself is asynchronous and
+         * completes through onPurchaseResponse().
          */
+        android.util.Log.d(
+                "CartCueAmazonIAP",
+                "Product data response: " +
+                response.getRequestStatus()
+        );
     }
 
     @Override
     public void onPurchaseResponse(
             PurchaseResponse response
     ) {
+        String requestKey =
+                response.getRequestId().toString();
+
         PluginCall call =
-                pendingPurchases.remove(
-                        response
-                                .getRequestId()
-                                .toString()
-                );
+                pendingPurchases.remove(requestKey);
 
         if (call == null) {
             return;
         }
 
-        switch (
-                response.getRequestStatus()
-        ) {
+        switch (response.getRequestStatus()) {
+
             case SUCCESSFUL:
 
                 Receipt receipt =
@@ -322,7 +308,7 @@ public class AmazonIAPPlugin
 
                 if (receipt == null) {
                     call.reject(
-                            "Amazon returned no receipt."
+                            "Amazon returned no purchase receipt."
                     );
                     return;
                 }
@@ -350,24 +336,21 @@ public class AmazonIAPPlugin
                         receipt.getReceiptId()
                 );
 
-                result.put(
-                        "purchaseDate",
-                        receipt
-                                .getPurchaseDate()
-                                .getTime()
-                );
+                if (receipt.getPurchaseDate() != null) {
+                    result.put(
+                            "purchaseDate",
+                            receipt.getPurchaseDate().getTime()
+                    );
+                }
 
-                result.put(
-                        "productType",
-                        receipt
-                                .getProductType()
-                                .toString()
-                );
+                if (receipt.getProductType() != null) {
+                    result.put(
+                            "productType",
+                            receipt.getProductType().toString()
+                    );
+                }
 
-                if (
-                        response.getUserData()
-                                != null
-                ) {
+                if (response.getUserData() != null) {
                     result.put(
                             "userId",
                             response
@@ -383,9 +366,7 @@ public class AmazonIAPPlugin
                     );
                 }
 
-                call.resolve(
-                        result
-                );
+                call.resolve(result);
 
                 break;
 
@@ -409,6 +390,14 @@ public class AmazonIAPPlugin
 
                 call.reject(
                         "NOT_SUPPORTED"
+                );
+
+                break;
+
+            case PENDING:
+
+                call.reject(
+                        "AMAZON_PURCHASE_PENDING"
                 );
 
                 break;
@@ -437,8 +426,7 @@ public class AmazonIAPPlugin
                 response.getRequestStatus() !=
                 PurchaseUpdatesResponse.RequestStatus.SUCCESSFUL
         ) {
-            PluginCall call =
-                    updatesCall;
+            PluginCall call = updatesCall;
 
             updatesCall = null;
 
@@ -450,9 +438,7 @@ public class AmazonIAPPlugin
             return;
         }
 
-        if (
-                response.getUserData() != null
-        ) {
+        if (response.getUserData() != null) {
             restoredUserId =
                     response
                             .getUserData()
@@ -464,51 +450,44 @@ public class AmazonIAPPlugin
                             .getMarketplace();
         }
 
-        if (
-                response.getReceipts() != null
-        ) {
+        if (response.getReceipts() != null) {
             for (
                     Receipt receipt :
                     response.getReceipts()
             ) {
-                restoredReceipts.add(
-                        receipt
-                );
+                if (receipt != null) {
+                    restoredReceipts.add(receipt);
+                }
             }
         }
 
         /*
-         * Amazon may paginate purchase history.
+         * Amazon purchase updates are paginated.
          */
         if (response.hasMore()) {
             try {
-                PurchasingService.getPurchaseUpdates(
-                        false
-                );
+                PurchasingService.getPurchaseUpdates(false);
             } catch (Exception error) {
-                PluginCall call =
-                        updatesCall;
+                PluginCall call = updatesCall;
 
                 updatesCall = null;
 
                 call.reject(
                         "Amazon purchase pagination failed: " +
-                        error.getMessage()
+                        safeMessage(error)
                 );
             }
 
             return;
         }
 
-        JSArray receipts =
-                new JSArray();
+        JSArray receipts = new JSArray();
 
         for (
                 Receipt receipt :
                 restoredReceipts
         ) {
-            JSObject item =
-                    new JSObject();
+            JSObject item = new JSObject();
 
             item.put(
                     "sku",
@@ -525,25 +504,24 @@ public class AmazonIAPPlugin
                     receipt.getReceiptId()
             );
 
-            item.put(
-                    "purchaseDate",
-                    receipt
-                            .getPurchaseDate()
-                            .getTime()
-            );
+            if (receipt.getPurchaseDate() != null) {
+                item.put(
+                        "purchaseDate",
+                        receipt
+                                .getPurchaseDate()
+                                .getTime()
+                );
+            }
 
             item.put(
                     "canceled",
                     receipt.isCanceled()
             );
 
-            receipts.put(
-                    item
-            );
+            receipts.put(item);
         }
 
-        JSObject data =
-                new JSObject();
+        JSObject data = new JSObject();
 
         data.put(
                 "receipts",
@@ -560,13 +538,21 @@ public class AmazonIAPPlugin
                 restoredMarketplace
         );
 
-        PluginCall call =
-                updatesCall;
+        PluginCall call = updatesCall;
 
         updatesCall = null;
 
-        call.resolve(
-                data
-        );
+        call.resolve(data);
     }
-                }
+
+    private String safeMessage(Exception error) {
+        String message = error.getMessage();
+
+        if (message == null ||
+                message.trim().isEmpty()) {
+            return error.getClass().getSimpleName();
+        }
+
+        return message;
+    }
+                    }
