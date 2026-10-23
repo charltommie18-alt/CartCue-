@@ -27,6 +27,8 @@ import java.util.Map;
 public class AmazonIAPPlugin extends Plugin
         implements PurchasingListener {
 
+    private static final String TAG = "CartCueAmazonIAP";
+
     private final Map<String, PluginCall> pendingPurchases =
             new HashMap<>();
 
@@ -53,15 +55,15 @@ public class AmazonIAPPlugin extends Plugin
 
             PurchasingService.enablePendingPurchases();
 
-            android.util.Log.d(
-                    "CartCueAmazonIAP",
+            android.util.Log.i(
+                    TAG,
                     "Amazon IAP listener registered."
             );
 
         } catch (Exception error) {
             android.util.Log.e(
-                    "CartCueAmazonIAP",
-                    "Amazon IAP initialization failed",
+                    TAG,
+                    "Amazon IAP initialization failed.",
                     error
             );
         }
@@ -78,8 +80,8 @@ public class AmazonIAPPlugin extends Plugin
 
         final String cleanSku = sku.trim();
 
-        android.util.Log.d(
-                "CartCueAmazonIAP",
+        android.util.Log.i(
+                TAG,
                 "Starting purchase for SKU: " + cleanSku
         );
 
@@ -88,9 +90,14 @@ public class AmazonIAPPlugin extends Plugin
                     PurchasingService.purchase(cleanSku);
 
             if (requestId == null) {
+                android.util.Log.e(
+                        TAG,
+                        "Amazon returned a null purchase request ID."
+                );
+
                 call.reject(
-                        "Amazon purchase could not be started: " +
-                        "Amazon returned no request ID."
+                        "Amazon purchase could not be started: "
+                                + "Amazon returned no request ID."
                 );
                 return;
             }
@@ -102,28 +109,35 @@ public class AmazonIAPPlugin extends Plugin
 
             call.setKeepAlive(true);
 
-            android.util.Log.d(
-                    "CartCueAmazonIAP",
-                    "Purchase request submitted. Request ID: " +
-                    requestId
+            android.util.Log.i(
+                    TAG,
+                    "Purchase request submitted. Request ID: "
+                            + requestId
             );
 
         } catch (Exception error) {
             android.util.Log.e(
-                    "CartCueAmazonIAP",
-                    "Exception starting Amazon purchase",
+                    TAG,
+                    "Exception starting Amazon purchase.",
                     error
             );
 
             call.reject(
-                    "Amazon purchase could not be started: " +
-                    safeMessage(error)
+                    "Amazon purchase could not be started: "
+                            + safeMessage(error)
             );
         }
     }
 
     @PluginMethod
     public void getUserData(PluginCall call) {
+        if (userDataCall != null) {
+            call.reject(
+                    "An Amazon user data request is already running."
+            );
+            return;
+        }
+
         userDataCall = call;
         call.setKeepAlive(true);
 
@@ -133,9 +147,15 @@ public class AmazonIAPPlugin extends Plugin
         } catch (Exception error) {
             userDataCall = null;
 
+            android.util.Log.e(
+                    TAG,
+                    "Amazon user data request failed.",
+                    error
+            );
+
             call.reject(
-                    "Amazon user data request failed: " +
-                    safeMessage(error)
+                    "Amazon user data request failed: "
+                            + safeMessage(error)
             );
         }
     }
@@ -172,9 +192,15 @@ public class AmazonIAPPlugin extends Plugin
         } catch (Exception error) {
             updatesCall = null;
 
+            android.util.Log.e(
+                    TAG,
+                    "Amazon purchase updates request failed.",
+                    error
+            );
+
             call.reject(
-                    "Amazon purchase updates failed: " +
-                    safeMessage(error)
+                    "Amazon purchase updates failed: "
+                            + safeMessage(error)
             );
         }
     }
@@ -193,7 +219,7 @@ public class AmazonIAPPlugin extends Plugin
             return;
         }
 
-        FulfillmentResult fulfillment;
+        final FulfillmentResult fulfillment;
 
         try {
             fulfillment = FulfillmentResult.valueOf(result);
@@ -215,9 +241,15 @@ public class AmazonIAPPlugin extends Plugin
             call.resolve(response);
 
         } catch (Exception error) {
+            android.util.Log.e(
+                    TAG,
+                    "Amazon fulfillment failed.",
+                    error
+            );
+
             call.reject(
-                    "Amazon fulfillment failed: " +
-                    safeMessage(error)
+                    "Amazon fulfillment failed: "
+                            + safeMessage(error)
             );
         }
     }
@@ -226,13 +258,19 @@ public class AmazonIAPPlugin extends Plugin
     public void onUserDataResponse(
             UserDataResponse response
     ) {
+        android.util.Log.i(
+                TAG,
+                "User data response status: "
+                        + response.getRequestStatus()
+        );
+
         if (userDataCall == null) {
             return;
         }
 
         if (
-                response.getRequestStatus() ==
-                UserDataResponse.RequestStatus.SUCCESSFUL
+                response.getRequestStatus()
+                        == UserDataResponse.RequestStatus.SUCCESSFUL
         ) {
             JSObject data = new JSObject();
 
@@ -257,8 +295,8 @@ public class AmazonIAPPlugin extends Plugin
 
         } else {
             userDataCall.reject(
-                    "Amazon user data failed: " +
-                    response.getRequestStatus()
+                    "Amazon user data failed: "
+                            + response.getRequestStatus()
             );
         }
 
@@ -269,25 +307,25 @@ public class AmazonIAPPlugin extends Plugin
     public void onProductDataResponse(
             ProductDataResponse response
     ) {
-        android.util.Log.d(
-                "CartCueAmazonIAP",
-                "Product data response status: " +
-                response.getRequestStatus()
+        android.util.Log.i(
+                TAG,
+                "Product data response status: "
+                        + response.getRequestStatus()
         );
 
         if (response.getProductData() != null) {
-            android.util.Log.d(
-                    "CartCueAmazonIAP",
-                    "Products returned: " +
-                    response.getProductData().keySet()
+            android.util.Log.i(
+                    TAG,
+                    "Products returned: "
+                            + response.getProductData().keySet()
             );
         }
 
         if (response.getUnavailableSkus() != null) {
             android.util.Log.e(
-                    "CartCueAmazonIAP",
-                    "Unavailable SKUs: " +
-                    response.getUnavailableSkus()
+                    TAG,
+                    "Unavailable SKUs: "
+                            + response.getUnavailableSkus()
             );
         }
     }
@@ -299,24 +337,31 @@ public class AmazonIAPPlugin extends Plugin
         String requestKey =
                 response.getRequestId().toString();
 
-        android.util.Log.e(
-                "CartCueAmazonIAP",
-                "Amazon purchase response status: " +
-                response.getRequestStatus()
+        PurchaseResponse.RequestStatus status =
+                response.getRequestStatus();
+
+        android.util.Log.i(
+                TAG,
+                "Amazon purchase response status: " + status
+        );
+
+        android.util.Log.i(
+                TAG,
+                "Amazon purchase response request ID: " + requestKey
         );
 
         PluginCall call = pendingPurchases.remove(requestKey);
 
         if (call == null) {
             android.util.Log.e(
-                    "CartCueAmazonIAP",
-                    "No pending purchase call for request ID: " +
-                    requestKey
+                    TAG,
+                    "No pending purchase call for request ID: "
+                            + requestKey
             );
             return;
         }
 
-        switch (response.getRequestStatus()) {
+        switch (status) {
 
             case SUCCESSFUL: {
                 Receipt receipt = response.getReceipt();
@@ -366,31 +411,52 @@ public class AmazonIAPPlugin extends Plugin
             }
 
             case ALREADY_PURCHASED:
-                call.reject("ALREADY_PURCHASED");
+                call.reject(
+                        "ALREADY_PURCHASED: This item may already be owned."
+                );
                 break;
 
             case INVALID_SKU:
-                call.reject("INVALID_SKU");
+                call.reject(
+                        "INVALID_SKU: Amazon did not accept the product SKU."
+                );
                 break;
 
             case NOT_SUPPORTED:
-                call.reject("NOT_SUPPORTED");
+                call.reject(
+                        "NOT_SUPPORTED: Amazon purchase is not supported "
+                                + "in this environment."
+                );
                 break;
 
             case PENDING:
-                call.reject("AMAZON_PURCHASE_PENDING");
+                call.reject(
+                        "AMAZON_PURCHASE_PENDING: The purchase is pending."
+                );
                 break;
 
             case FAILED:
+                android.util.Log.e(
+                        TAG,
+                        "Amazon returned FAILED for SKU request: "
+                                + requestKey
+                );
+
                 call.reject(
-                        "AMAZON_PURCHASE_FAILED: Amazon returned FAILED."
+                        "AMAZON_PURCHASE_FAILED: Amazon returned FAILED. "
+                                + "Check the CartCueAmazonIAP logs."
                 );
                 break;
 
             default:
+                android.util.Log.e(
+                        TAG,
+                        "Unexpected Amazon purchase status: " + status
+                );
+
                 call.reject(
-                        "AMAZON_PURCHASE_FAILED: Amazon status was " +
-                        response.getRequestStatus()
+                        "AMAZON_PURCHASE_FAILED: Amazon status was "
+                                + status
                 );
                 break;
         }
@@ -400,20 +466,26 @@ public class AmazonIAPPlugin extends Plugin
     public void onPurchaseUpdatesResponse(
             PurchaseUpdatesResponse response
     ) {
+        android.util.Log.i(
+                TAG,
+                "Purchase updates response status: "
+                        + response.getRequestStatus()
+        );
+
         if (updatesCall == null) {
             return;
         }
 
         if (
-                response.getRequestStatus() !=
-                PurchaseUpdatesResponse.RequestStatus.SUCCESSFUL
+                response.getRequestStatus()
+                        != PurchaseUpdatesResponse.RequestStatus.SUCCESSFUL
         ) {
             PluginCall call = updatesCall;
             updatesCall = null;
 
             call.reject(
-                    "Amazon purchase updates failed: " +
-                    response.getRequestStatus()
+                    "Amazon purchase updates failed: "
+                            + response.getRequestStatus()
             );
 
             return;
@@ -443,9 +515,15 @@ public class AmazonIAPPlugin extends Plugin
                 PluginCall call = updatesCall;
                 updatesCall = null;
 
+                android.util.Log.e(
+                        TAG,
+                        "Amazon purchase pagination failed.",
+                        error
+                );
+
                 call.reject(
-                        "Amazon purchase pagination failed: " +
-                        safeMessage(error)
+                        "Amazon purchase pagination failed: "
+                                + safeMessage(error)
                 );
             }
 
@@ -492,7 +570,7 @@ public class AmazonIAPPlugin extends Plugin
             return error.getClass().getSimpleName();
         }
 
-        return message;
+        return message; 
            }
-                    
+     
         }
