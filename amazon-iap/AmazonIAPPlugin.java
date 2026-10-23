@@ -493,6 +493,6 @@ public class AmazonIAPPlugin extends Plugin
         }
 
         return message;
-    }
+           }
                     
         }
